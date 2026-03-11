@@ -11,5 +11,7 @@ dependencies = [
     "pandas>=3.0.1",
     "pip>=26.0.1",
     "polars>=1.38.1",
+    "prince>=0.16.6",
     "pyarrow>=23.0.1",
+    "seaborn>=0.13.2",
 ]
