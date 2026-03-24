@@ -66,6 +66,11 @@ df.head(5)
 3e partie
 
 '''
+# A partir de tous nos "sous-fichiers" en parquet, on crée maintenant un unique fichier parquet qui contient toutes les données. 
+# Pour cela, on va faire des jointures successives entre les différents fichiers en utilisant les colonnes "codecommune" et "dep" comme clés de jointure.
+# Cela nous permet d'assembler nos colonnes en gardant nos colonnes alignées par individu (dans le cas où les données n'existent pas pour certaines communes,
+# on aura des valeurs null mais les autres colonnes seront bien alignées pour les communes qui ont des données dans tous les fichiers).
+
 
 # 1. On définit le chemin du dossier
 dossier_data = Path("données_ind")
@@ -114,6 +119,9 @@ with pl.StringCache():
     df_complet = q_globale.collect()
 
 print(f"Fusion terminée ! Taille du dataframe : {df_complet.shape}")
+
+# Finalement, on sauvegarde le dataframe complet en parquet pour pouvoir l'utiliser facilement dans notre analyse. 
+# On a choisi le format parquet plutôt que csv car il est plus rapide à lire et à écrire, ce qui est important pour un dataframe aussi volumineux que celui-ci. 
 
 df_complet.write_parquet("data_complet.parquet")
 shape = df_complet.shape
