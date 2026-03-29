@@ -16,4 +16,5 @@ dependencies = [
     "prince>=0.16.6",
     "pyarrow>=23.0.1",
     "seaborn>=0.13.2",
+    "statsmodels>=0.14.6",
 ]
