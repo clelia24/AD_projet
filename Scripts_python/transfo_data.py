@@ -115,6 +115,18 @@ def crea_variable_gagnants (data):
     data['Parti_Dominant']=data['Parti_Dominant'].astype('category')
     return data
 
+def ajouter_variable_division(data, colonnes_partis, seuil=0.25):
+    # On cherche le score maximum pour chaque commune parmi les colonnes de partis
+    score_max = data[colonnes_partis].max(axis=1)
+    
+    # Si le score max est inférieur au seuil, la commune est considérée comme "divisée"
+    data['Est_Divise'] = (score_max < seuil).astype(int)
+ 
+    nb_divises = data['Est_Divise'].sum()
+    print(f"Variable 'Est_Divise' créée : {nb_divises} communes sont considérées comme divisées.")
+    
+    return data
+
 
 """ 
 Cette partie du fichier contient des fonctions d'affichage des données.
