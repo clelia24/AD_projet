@@ -123,6 +123,8 @@ def ajouter_variable_division(data, colonnes_partis, seuil=0.25):
     data['Est_Divise'] = (score_max < seuil).astype(int)
  
     nb_divises = data['Est_Divise'].sum()
+    data['Est_Divise'] = data['Est_Divise'].astype('category')
+    data = pd.get_dummies(data, columns=['Est_Divise'], drop_first=True)
     print(f"Variable 'Est_Divise' créée : {nb_divises} communes sont considérées comme divisées.")
     
     return data
