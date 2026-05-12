@@ -31,25 +31,6 @@ def transfo_pca(data, n_components=5):
 
 
 def run_pca(X_scaled, n_components=5):
-    """
-    Réalise une PCA sur les colonnes numériques d'un dataframe.
-
-    Paramètres
-    ----------
-    X_scaled : ndarray
-        Données standardisées.
-
-    n_components : int
-        Nombre de composantes principales à conserver.
-
-    Retour
-    -------
-    X_pca : ndarray
-        Données projetées dans l'espace PCA.
-
-    pca : PCA
-        Objet PCA entraîné.
-    """
 
     # PCA
     pca = PCA(n_components=n_components)
@@ -63,13 +44,17 @@ def run_pca(X_scaled, n_components=5):
 
     print(f"Dimension après PCA : {X_pca.shape}\n")
 
-    # Variance expliquée
+
+
+    return X_pca, pca
+
+def plot_explained_variance(pca):
+        # Variance expliquée
     print("Explained variance :")
 
-    explained_variance = pca.explained_variance_ratio_
+    explained_variance = pca.explained_variance_ratio_ 
 
     for i, var_ratio in enumerate(explained_variance, start=1):
-
         print(
             f"Composante {i} : "
             f"{var_ratio:.2f} "
@@ -86,7 +71,7 @@ def run_pca(X_scaled, n_components=5):
 
     plt.plot(
         range(1, len(explained_variance)+1),
-        explained_variance,
+        explained_variance*100,
         marker='o'
     )
 
@@ -99,8 +84,6 @@ def run_pca(X_scaled, n_components=5):
     plt.grid(True)
 
     plt.show()
-
-    return X_pca, pca
 
 
 
@@ -116,38 +99,17 @@ def identifier_colonnes(df):
     
     return socio_cols, vote_supp_cols
 
-def preparer_et_calculer_pca(df, socio_cols, n_comp=10):
-    """Nettoie, scale et calcule la PCA."""
-    # Nettoyage
-    df_pca = df[socio_cols].replace([np.inf, -np.inf], np.nan).fillna(0)
-    
-    # Scaling
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(df_pca)
-    
-    # PCA
-    pca = PCA(n_components=n_comp, random_state=42)
-    coords = pca.fit_transform(X_scaled)
-    
-    return pca, coords, df_pca
 
-def plot_eboulis(pca):
+def plot_cumul(pca):
     """Affiche le scree plot (éboulis des valeurs propres)."""
-    explained = pca.explained_variance_ratio_ * 100
+    explained= pca.explained_variance_ratio_ * 100
     cumulative = np.cumsum(explained)
-    n_comp = len(explained)
-    
-    fig, ax = plt.subplots(figsize=(9, 4))
-    ax.bar(range(1, n_comp+1), explained, color='steelblue', alpha=0.7, label='Variance expliquée (%)')
-    ax.plot(range(1, n_comp+1), cumulative, marker='o', color='darkorange', label='Cumulée (%)')
-    ax.axhline(80, color='red', linestyle='--', linewidth=0.8, label='Seuil 80%')
-    ax.set_xlabel('Composante principale')
-    ax.set_ylabel('%')
-    ax.set_title('Variance expliquée par composante')
-    ax.legend()
-    ax.set_xticks(range(1, n_comp+1))
-    plt.tight_layout()
-    return fig
+    plt.plot(cumulative, marker='o', color='steelblue')
+    plt.title('Cumulative explained variance according to the dimension of the PCA␣')
+    plt.xlabel('Number of components in the PCA')
+    plt.ylabel('Cumulative explained variance');
+    plt.axhline(80, color='red', linestyle='--', linewidth=0.8, label='Seuil 80%')
+
 
 def plot_cercle_correlations(pca, feature_names, top_n=15):
     """Affiche le cercle des corrélations pour les top variables."""
