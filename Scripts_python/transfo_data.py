@@ -40,7 +40,7 @@ def cols_drop (data):
         'pervoteTD', 
         'pervoteGCG', 
         'pervoteDCD',
-        # pour les données concernant l'abstention, on garde uniquement le  ration du pourcentage de participation par rapport à la population totale. Les autres informations sont redondantes 
+        # pour les données concernant l'abstention, on garde uniquement le  ratio du pourcentage de participation par rapport à la population totale. Les autres informations sont redondantes 
         'ppar',
         'perpar',
         'pblancnul',
@@ -48,7 +48,7 @@ def cols_drop (data):
         'pins',
         'pabs',
         'pblancsnuls',
-        # on garde seulement la variable d'age moyen, les autres variables d'age sont redondantes et très corrélées entre elles
+        # on garde seulement la variable d'age moyen, les autres variables d'age sont redondantes 
         'prop0142022',
         'prop15392022',
         'prop40592022',
@@ -91,6 +91,7 @@ def cols_drop (data):
     return data
 
 def modif_quali (data, col, bins, labels,nom, right):
+    #fonction utilisée pour transformer les variables quantitatives en qualitatives
     data[nom]=pd.cut(data[col], bins=bins, labels=labels, right=right) # right=False pour que 20 soit dans la tranche 20-30, etc.
     data= data.drop(col, axis=1, errors='ignore') # on supprime la variable quantitative 
     data[nom] = data[nom].astype('category') # on convertit la variable qualitative en type category pour économiser de la mémoire et faciliter les analyses ultérieures

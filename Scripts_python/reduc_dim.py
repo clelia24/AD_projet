@@ -16,18 +16,21 @@ MCA- les fonctions suivantes sont utilisées pour la MCA
 """
 
 def enlever_dummies(data, debut, nom_col, nom_manquant):
-    col_a_nett= [c for c in data.columns if c.startswith(debut)]
-    data[nom_col]=data[col_a_nett].idxmax(axis=1)
-    data.loc[data[col_a_nett].sum(axis=1) == 0, nom_col] = nom_manquant
-    data=data.drop(col_a_nett, axis=1, errors='ignore')
-    data[nom_col]=data[nom_col].str.replace(debut,'', regex=False)
+    #permet de regrouper les variables sous forme de dummies en une seule variable
+    col_a_nett= [c for c in data.columns if c.startswith(debut)] 
+    data[nom_col]=data[col_a_nett].idxmax(axis=1) # les autres sont en 0, donc ça prend la seule qui est en 1
+    data.loc[data[col_a_nett].sum(axis=1) == 0, nom_col] = nom_manquant # si il y en a 0 ça veut dire que c'est celle qui a été enlevé qu'il met 
+    data=data.drop(col_a_nett, axis=1, errors='ignore') 
+    data[nom_col]=data[nom_col].str.replace(debut,'', regex=False) 
     return data 
 
 
 def MCA(data, nb_compo=2):
+    #code pour faire la MCA de nos données 
     mca = pr.MCA(n_components=nb_compo, random_state=42)
     mca = mca.fit(data)
 
+    #statistiques
     print("="*50)
     print("STATISTIQUES DE L'ACM")
     stats = pd.DataFrame({
@@ -82,7 +85,7 @@ def MCA(data, nb_compo=2):
     return mca
 
 def analyse_dimensionnelle_mca(data, seuils=[50, 80]): 
-   
+   #code pour analyser les variables à ajouter pour expliquer la variance 
     n_modalites = sum(data.nunique())
     n_vars = len(data.columns)
     n_max = n_modalites - n_vars
@@ -114,6 +117,7 @@ def analyse_dimensionnelle_mca(data, seuils=[50, 80]):
 
 
 def plot_mca_modalities_fortes(mca, data, use_contribution=True):
+    #plot les contributions/ le cos2 de chaque modfalité
     coords = mca.column_coordinates(data)
     if use_contribution:
         stat = mca.column_contributions_.sum(axis=1) 
@@ -139,6 +143,7 @@ def plot_mca_modalities_fortes(mca, data, use_contribution=True):
 
 
 def plot_mca_variable_importance(mca, data):
+    # contribution des variables au deux premiers axes 
     contributions = mca.column_contributions_
     var_data = []
     
