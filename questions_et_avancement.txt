@@ -1,0 +1,13 @@
+Eu egard a la division du vote, voir s'il y a des clusters qui ont des divisions du vote plus élevées
+
+ACM sur les circo / variables, etc
+
+Du coup pour les circonscriptions c'est pas possible parce que il peut y avoir plusieurs circonscriptions sur une commune
+
+Enlever les resultats du vote pour faire du clustering et comparer ensuite avec la carte des etiquettes politiques pour voir
+
+Enlever des variables pour reduire le bruit, voir la combinaison ideale de variable qui donne les meilleurs resultats
+
+
+
+J'ai essayé d'intégrer un facteur circonscriptions mais c'est impossible car des communes peuvent etre traversées par plusieurs circo
