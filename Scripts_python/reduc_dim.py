@@ -12,28 +12,8 @@ from sklearn.preprocessing import StandardScaler
 PCA - les fonctions suivantes sont utilisées pour la PCA
 """
 
-def run_pca(data, n_components=5):
-    """
-    Réalise une PCA sur les colonnes numériques d'un dataframe.
-
-    Paramètres
-    ----------
-    data : pandas.DataFrame
-        Données d'entrée.
-
-    n_components : int
-        Nombre de composantes principales à conserver.
-
-    Retour
-    -------
-    X_pca : ndarray
-        Données projetées dans l'espace PCA.
-
-    pca : PCA
-        Objet PCA entraîné.
-    """
-
-    # Sélection des colonnes numériques
+def transfo_pca(data, n_components=5):
+        # Sélection des colonnes numériques
     data_num = data.select_dtypes(include=['float64', 'int64'])
 
     # Remplacement des valeurs infinies par NaN
@@ -46,6 +26,30 @@ def run_pca(data, n_components=5):
     scaler = StandardScaler()
 
     X_scaled = scaler.fit_transform(data_num)
+
+    return X_scaled
+
+
+def run_pca(X_scaled, n_components=5):
+    """
+    Réalise une PCA sur les colonnes numériques d'un dataframe.
+
+    Paramètres
+    ----------
+    X_scaled : ndarray
+        Données standardisées.
+
+    n_components : int
+        Nombre de composantes principales à conserver.
+
+    Retour
+    -------
+    X_pca : ndarray
+        Données projetées dans l'espace PCA.
+
+    pca : PCA
+        Objet PCA entraîné.
+    """
 
     # PCA
     pca = PCA(n_components=n_components)
@@ -97,6 +101,130 @@ def run_pca(data, n_components=5):
     plt.show()
 
     return X_pca, pca
+
+
+
+def identifier_colonnes(df):
+    """Sépare les variables socio-éco des variables de vote."""
+    vote_cols = [c for c in df.select_dtypes(include=[np.number]).columns
+                 if any(k in c.lower() for k in ['vote', 'pvoix', 'ratio', 'score', 'blancnul', 'par', 'insr'])]
+    
+    socio_cols = [c for c in df.select_dtypes(include=[np.number]).columns
+                  if c not in vote_cols and c not in ['Bloc_Score', 'Parti_Score']]
+    
+    vote_supp_cols = [c for c in ['pvoteG', 'pvoteCG', 'pvoteC', 'pvoteCD', 'pvoteD'] if c in df.columns]
+    
+    return socio_cols, vote_supp_cols
+
+def preparer_et_calculer_pca(df, socio_cols, n_comp=10):
+    """Nettoie, scale et calcule la PCA."""
+    # Nettoyage
+    df_pca = df[socio_cols].replace([np.inf, -np.inf], np.nan).fillna(0)
+    
+    # Scaling
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(df_pca)
+    
+    # PCA
+    pca = PCA(n_components=n_comp, random_state=42)
+    coords = pca.fit_transform(X_scaled)
+    
+    return pca, coords, df_pca
+
+def plot_eboulis(pca):
+    """Affiche le scree plot (éboulis des valeurs propres)."""
+    explained = pca.explained_variance_ratio_ * 100
+    cumulative = np.cumsum(explained)
+    n_comp = len(explained)
+    
+    fig, ax = plt.subplots(figsize=(9, 4))
+    ax.bar(range(1, n_comp+1), explained, color='steelblue', alpha=0.7, label='Variance expliquée (%)')
+    ax.plot(range(1, n_comp+1), cumulative, marker='o', color='darkorange', label='Cumulée (%)')
+    ax.axhline(80, color='red', linestyle='--', linewidth=0.8, label='Seuil 80%')
+    ax.set_xlabel('Composante principale')
+    ax.set_ylabel('%')
+    ax.set_title('Variance expliquée par composante')
+    ax.legend()
+    ax.set_xticks(range(1, n_comp+1))
+    plt.tight_layout()
+    return fig
+
+def plot_cercle_correlations(pca, feature_names, top_n=15):
+    """Affiche le cercle des corrélations pour les top variables."""
+    loadings = pca.components_
+    explained = pca.explained_variance_ratio_ * 100
+    
+    cos2 = loadings[0]**2 + loadings[1]**2
+    top_idx = np.argsort(cos2)[-top_n:]
+    
+    fig, ax = plt.subplots(figsize=(8, 8))
+    circle = plt.Circle((0, 0), 1, color='grey', fill=False, linestyle='--')
+    ax.add_patch(circle)
+
+    for i in top_idx:
+        ax.annotate('', xy=(loadings[0, i], loadings[1, i]), xytext=(0, 0),
+                    arrowprops=dict(arrowstyle='->', color='steelblue', lw=1.5))
+        ax.text(loadings[0, i]*1.07, loadings[1, i]*1.07,
+                feature_names[i], fontsize=8, ha='center', color='steelblue')
+
+    ax.axhline(0, color='k', linewidth=0.5)
+    ax.axvline(0, color='k', linewidth=0.5)
+    ax.set_xlim(-1.2, 1.2)
+    ax.set_ylim(-1.2, 1.2)
+    ax.set_xlabel(f'PC1 ({explained[0]:.1f}%)')
+    ax.set_ylabel(f'PC2 ({explained[1]:.1f}%)')
+    ax.set_title(f'Cercle des corrélations (top {top_n} variables)')
+    ax.set_aspect('equal')
+    plt.tight_layout()
+    return fig
+
+def plot_biplot_complet(pca, coords, df_orig, socio_cols, vote_supp_cols, sample_size=3000):
+    """Affiche le biplot avec individus colorés et variables de vote supplémentaires."""
+    explained = pca.explained_variance_ratio_ * 100
+    
+    # Échantillonnage pour la lisibilité
+    sample_idx = df_orig.sample(n=min(sample_size, len(df_orig)), random_state=42).index
+    # On récupère les positions entières des index échantillonnés
+    sample_pos = [df_orig.index.get_loc(i) for i in sample_idx]
+
+    couleurs_blocs = {
+        'pvoteG': '#d73027', 'pvoteCG': '#C46B7A', 'pvoteC': '#FFA500',
+        'pvoteCD': '#91bfdb', 'pvoteD': '#4575b4',
+    }
+    
+    fig, ax = plt.subplots(figsize=(10, 8))
+    
+    # Affichage des individus
+    if 'Bloc_Dominant' in df_orig.columns:
+        bloc_col = df_orig.loc[sample_idx, 'Bloc_Dominant']
+        for bloc, couleur in couleurs_blocs.items():
+            mask = (bloc_col == bloc).values
+            if mask.any():
+                # On filtre coords par les positions de l'échantillon puis par le masque
+                sub_coords = coords[sample_pos][mask]
+                ax.scatter(sub_coords[:, 0], sub_coords[:, 1], c=couleur, alpha=0.3, s=8, label=bloc)
+        ax.legend(title='Bloc dominant', markerscale=2)
+    else:
+        ax.scatter(coords[sample_pos, 0], coords[sample_pos, 1], alpha=0.2, s=8)
+
+    # Variables de vote en supplémentaires
+    df_vote_supp = df_orig[vote_supp_cols].replace([np.inf, -np.inf], np.nan).fillna(0)
+    X_supp_scaled = StandardScaler().fit_transform(df_vote_supp)
+    vote_loadings = np.corrcoef(X_supp_scaled.T, coords[:, :2].T)[:len(vote_supp_cols), len(vote_supp_cols):]
+
+    scale = np.abs(coords[:, :2]).max() * 0.6
+    for j, vname in enumerate(vote_supp_cols):
+        vx, vy = vote_loadings[j, 0] * scale, vote_loadings[j, 1] * scale
+        ax.annotate('', xy=(vx, vy), xytext=(0, 0), arrowprops=dict(arrowstyle='->', color='black', lw=2))
+        ax.text(vx*1.1, vy*1.1, vname, fontsize=9, fontweight='bold')
+
+    ax.axhline(0, color='k', linewidth=0.5)
+    ax.axvline(0, color='k', linewidth=0.5)
+    ax.set_xlabel(f'PC1 ({explained[0]:.1f}%)')
+    ax.set_ylabel(f'PC2 ({explained[1]:.1f}%)')
+    ax.set_title('Biplot PCA — individus (bloc dominant) + variables de vote supplémentaires')
+    plt.tight_layout()
+    return fig
 
 
 """
