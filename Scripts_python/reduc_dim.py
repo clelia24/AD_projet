@@ -5,12 +5,100 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import prince as pr
 from adjustText import adjust_text
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 
 """
 PCA - les fonctions suivantes sont utilisées pour la PCA
 """
-def blabla():
-    return "pipoup"
+
+def run_pca(data, n_components=5):
+    """
+    Réalise une PCA sur les colonnes numériques d'un dataframe.
+
+    Paramètres
+    ----------
+    data : pandas.DataFrame
+        Données d'entrée.
+
+    n_components : int
+        Nombre de composantes principales à conserver.
+
+    Retour
+    -------
+    X_pca : ndarray
+        Données projetées dans l'espace PCA.
+
+    pca : PCA
+        Objet PCA entraîné.
+    """
+
+    # Sélection des colonnes numériques
+    data_num = data.select_dtypes(include=['float64', 'int64'])
+
+    # Remplacement des valeurs infinies par NaN
+    data_num = data_num.replace([np.inf, -np.inf], np.nan)
+
+    # Remplacement des valeurs manquantes par la moyenne
+    data_num = data_num.fillna(data_num.mean())
+
+    # Standardisation des données
+    scaler = StandardScaler()
+
+    X_scaled = scaler.fit_transform(data_num)
+
+    # PCA
+    pca = PCA(n_components=n_components)
+
+    X_pca = pca.fit_transform(X_scaled)
+
+    # Affichage des dimensions
+    print("-- PCA --")
+
+    print(f"Dimension initiale : {X_scaled.shape}")
+
+    print(f"Dimension après PCA : {X_pca.shape}\n")
+
+    # Variance expliquée
+    print("Explained variance :")
+
+    explained_variance = pca.explained_variance_ratio_
+
+    for i, var_ratio in enumerate(explained_variance, start=1):
+
+        print(
+            f"Composante {i} : "
+            f"{var_ratio:.2f} "
+            f"({var_ratio*100:.2f}% de la variance totale)"
+        )
+
+    print(
+        "\nVariance expliquée par chaque composante :",
+        explained_variance
+    )
+
+    # Graphique
+    plt.figure(figsize=(7,5))
+
+    plt.plot(
+        range(1, len(explained_variance)+1),
+        explained_variance,
+        marker='o'
+    )
+
+    plt.title("Variance expliquée par composante")
+
+    plt.xlabel("Composantes principales")
+
+    plt.ylabel("Variance expliquée")
+
+    plt.grid(True)
+
+    plt.show()
+
+    return X_pca, pca
+
+
 """
 MCA- les fonctions suivantes sont utilisées pour la MCA 
 """
