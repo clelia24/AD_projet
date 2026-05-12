@@ -186,7 +186,7 @@ def plot_biplot_complet(pca, coords, df_orig, socio_cols, vote_supp_cols, sample
     ax.set_ylabel(f'PC2 ({explained[1]:.1f}%)')
     ax.set_title('Biplot PCA — individus (bloc dominant) + variables de vote supplémentaires')
     plt.tight_layout()
-    return fig
+    
 
 
 """
