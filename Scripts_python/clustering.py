@@ -342,7 +342,7 @@ def fit_kmeans(donnees_scaled, n_clusters, random_state=42, n_init=10):
     #ajuste K-means
     X = np.array(donnees_scaled)
     km = KMeans(n_clusters=n_clusters, random_state=random_state, n_init=n_init)
-    labels = km.fit_predict(X) + 1
+    labels = km.fit_predict(X) 
     return labels, km
  
 def evaluer_kmeans(donnees_scaled, k_range, random_state=42, n_init=10, sample_size=None, random_state_sample=42):
