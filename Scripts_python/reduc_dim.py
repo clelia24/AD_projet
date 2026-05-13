@@ -7,6 +7,7 @@ import prince as pr
 from adjustText import adjust_text
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
+import random
 
 """
 PCA - les fonctions suivantes sont utilisées pour la PCA
@@ -370,5 +371,408 @@ def plot_mca_variable_importance(mca, data):
     plt.ylabel("Contribution à l'Axe 2", fontsize=12)
     plt.title("Importance des Variables", fontsize=14, pad=20)
     plt.grid(True, linestyle=':', alpha=0.4)
+    
+    plt.show()
+
+"""
+MFA- les fonctions suivantes sont utilisées pour la MFA 
+"""
+
+ 
+# Palette de couleurs pour les blocs politiques
+COULEURS_BLOCS = {
+    'pvoteG':  '#d73027',
+    'pvoteCG': '#C46B7A',
+    'pvoteC':  '#FFA500',
+    'pvoteCD': '#91bfdb',
+    'pvoteD':  '#4575b4',
+}
+ 
+# Palette de couleurs pour les groupes thématiques
+COULEURS_GROUPES = {
+    'economie':     '#2ca02c',
+    'demographie':  '#ff7f0e',
+    'csp_diplomes': '#9467bd',
+    'participation':'#8c564b',
+    'vote':         '#d62728',
+}
+
+def transfo_mfa(data, n_components=5):
+# Effectue les transformations nécessaires pour la MFA : on nettoie et standardise les données
+#Mais du coup on fait sur tout ? pas juste les variables num ??
+    data = data.replace([np.inf, -np.inf], np.nan)
+
+    # Remplacement des valeurs manquantes par la moyenne
+    data = data.fillna(data.mean())
+
+    # Standardisation des données
+    scaler = StandardScaler()
+
+    X_scaled = scaler.fit_transform(data)
+
+    return X_scaled
+
+
+
+
+def MFA(data, groupes, nb_compo=2):
+
+#Réalise une MFA sur un DataFrame avec des groupes de variables.
+#groupes doit être du format : groupes : dict  -> ex: {'eco': ['col1', 'col2'], 'Social': ['colo1', 'colo2']} (sinon soucis avec prince)
+
+    all_cols = list(np.concatenate(list(groupes.values())))
+    X = data[all_cols].copy()
+    
+    X = X.replace([np.inf, -np.inf], np.nan)
+    X = X.fillna(X.mean())
+
+    #on a un nombre maximum de composantes (limité par le nombre de variables et d'individus)
+    n_vars = sum(len(g) for g in groupes.values())
+    n_max = min(len(data) - 1, n_vars - 1)
+
+    mfa = pr.MFA(n_components=nb_compo, random_state=42)
+    mfa = mfa.fit(X, groups=groupes)
+
+    print("=" * 50)
+    print("STATISTIQUES DE LA MFA")
+    stats = pd.DataFrame({
+        'Valeur Propre': mfa.eigenvalues_,
+        '% Variance': mfa.percentage_of_variance_,
+        '% Cumulé': mfa.percentage_of_variance_.cumsum()
+    })
+    print(stats)
+    print("=" * 50)
+
+    return X, mfa
+
+def clean_label_mfa(data,mfa): 
+    #fonction récup du code MCA
+    #fonction qui permet de nettoyer les labels afin de faciliter la lecture des graphes 
+    #à garder pour quand j'afficherai les modalités 
+    col_coords = mfa.column_coordinates(data)
+    texts = []
+    binaires = ['0', '1', '0.0', '1.0', 'True', 'False', 'Oui', 'Non', 'O', 'N']
+    for index in col_coords.index:
+        label_original = str(index)
+        clean_label = label_original
+        
+        for col in data.columns:
+            if col in label_original:
+                valeur = label_original.replace(col, "").strip('_')
+                
+                if valeur in binaires or valeur == "":
+                    clean_label = f"{col}: {valeur}"
+                else:
+                    clean_label = valeur
+                break 
+
+        clean_label = clean_label.replace('_', ' ')
+        x = col_coords.loc[index, 0]
+        y = col_coords.loc[index, 1]
+        texts.append(plt.text(x, y, clean_label, fontsize=10, fontweight='bold'))
+
+    return texts
+
+
+
+def plot_mfa_colored(mfa, data, groupes, cols_vote, n_sample=2000):
+    """
+    Trace la carte des individus colorée selon le bloc de vote dominant.
+    """
+    # 1. Préparation des coordonnées (identique à ton code)
+    all_cols = list(np.concatenate(list(groupes.values())))
+    X_clean = data[all_cols].copy().replace([np.inf, -np.inf], np.nan).fillna(data[all_cols].mean())
+    row_coords = mfa.row_coordinates(X_clean)
+    
+    # 2. Identification du bloc dominant pour la coloration
+    # On cherche le nom de la colonne qui a la valeur max pour chaque ligne
+    data_coords = row_coords.copy()
+    data_coords['bloc_dominant'] = data.loc[row_coords.index, cols_vote].idxmax(axis=1)
+
+    if n_sample < len(data_coords):
+        data_plot = data_coords.sample(n=n_sample, random_state=42)
+        print(f"Affichage de {n_sample} communes sur {len(data_coords)}")
+    else:
+        data_plot = data_coords
+    plt.figure(figsize=(12, 8))
+    
+    # 3. Tracé avec Seaborn (gère automatiquement les couleurs et la légende)
+    # On réduit s (taille) et alpha (transparence) car tu as beaucoup de points
+    sns.scatterplot(
+        data=data_coords, 
+        x=0, y=1, 
+        hue='bloc_dominant', 
+        palette='Set1', # Palette de couleurs distinctes
+        s=15, 
+        alpha=0.6, 
+        edgecolor=None
+    )
+
+    # 4. Affichage d'un échantillon de noms (ton code adjust_text)
+    n_labels = min(50, len(row_coords))
+    sample_indices = random.sample(list(row_coords.index), n_labels)
+    texts = []
+    for idx in sample_indices:
+        x, y = row_coords.loc[idx, 0], row_coords.loc[idx, 1]
+        texts.append(plt.text(x, y, str(idx), fontsize=8, fontweight='bold'))
+
+    if texts:
+        adjust_text(texts, arrowprops=dict(arrowstyle='->', color='black', lw=0.5, alpha=0.5))
+
+    # 5. Cosmétique
+    plt.axhline(0, color='black', linestyle='--', linewidth=1, alpha=0.3)
+    plt.axvline(0, color='black', linestyle='--', linewidth=1, alpha=0.3)
+
+    v1 = mfa.percentage_of_variance_[0]
+    v2 = mfa.percentage_of_variance_[1]
+    plt.xlabel(f"Dimension 1 ({v1:.2f}%)")
+    plt.ylabel(f"Dimension 2 ({v2:.2f}%)")
+    plt.title("MFA : Carte des communes par Bloc Dominant", fontsize=14)
+    plt.legend(title="Vote Majoritaire", bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.grid(True, linestyle=':', alpha=0.5)
+    plt.tight_layout()
+    plt.show()
+
+
+def analyse_dimensionnelle_mfa(data, groupes, seuils=[50, 80]):
+    """
+    Trace la variance cumulée et indique le nb de dimensions nécessaires
+    pour atteindre les seuils donnés.
+    """
+
+    groupes_valides = {}
+    for nom, cols in groupes.items():
+        existantes = [c for c in cols if c in data.columns]
+        if existantes:
+            groupes_valides[nom] = existantes
+
+    # 2. Préparation et NETTOYAGE des données
+    all_cols = list(np.concatenate(list(groupes_valides.values())))
+    X = data[all_cols].copy()
+    
+    # Remplacement des infinis par NaN puis des NaN par la médiane
+    X = X.replace([np.inf, -np.inf], np.nan)
+    X = X.fillna(X.median())
+
+    # 2. Calcul du nombre de composantes maximum possible
+    n_vars = sum(len(g) for g in groupes_valides.values())
+    n_max = min(len(data) - 1, n_vars - 1)
+
+    mfa = pr.MFA(n_components=n_max, random_state=42)
+    mfa = mfa.fit(X, 
+                  groups=groupes_valides)
+
+    variance_cumulee = mfa.percentage_of_variance_.cumsum()
+    if variance_cumulee.max() <= 1:
+        variance_cumulee = variance_cumulee * 100
+
+    print("\n--- RÉSULTATS ---")
+    for seuil in seuils:
+        idx = np.where(variance_cumulee >= seuil)[0]
+        if len(idx) > 0:
+            print(f"Pour {seuil}% de variance : il faut {idx[0] + 1} dimensions.")
+        else:
+            print(f"Seuil {seuil}% non atteint (Max: {variance_cumulee.max():.2f}%)")
+
+    plt.figure(figsize=(10, 5))
+    plt.plot(range(1, len(variance_cumulee) + 1), variance_cumulee, marker='o')
+    plt.axhline(y=50, color='r', linestyle=':', label='Objectif 50%')
+    plt.axhline(y=80, color='g', linestyle=':', label='Objectif 80%')
+    plt.ylim(0, 105)
+    plt.title("MFA – Variance cumulée")
+    plt.xlabel("Nombre de dimensions")
+    plt.ylabel("% Variance cumulée")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+
+def plot_mfa_partial_individuals(mfa, data, groupes, n_sample=20):
+    """
+    Superpose les individus partiels et globaux pour un échantillon de communes.
+    """
+    # 1. Préparation et NETTOYAGE (Identique à vos fonctions précédentes)
+    groupes_valides = {}
+    for nom, cols in groupes.items():
+        existantes = [c for c in cols if c in data.columns]
+        if existantes:
+            groupes_valides[nom] = existantes
+
+    all_cols = list(np.concatenate(list(groupes_valides.values())))
+    X = data[all_cols].copy()
+    X = X.replace([np.inf, -np.inf], np.nan).fillna(X.median())
+
+    # 2. Échantillonnage (IMPORTANT : sinon le graphique est illisible)
+    if len(X) > n_sample:
+        X = X.sample(n_sample, random_state=42)
+
+    # 3. Récupération des coordonnées
+    global_coords = mfa.row_coordinates(X)
+    # Correction de l'erreur : prince retourne un DataFrame avec MultiIndex
+    partial_coords = mfa.partial_row_coordinates(X)
+    
+    group_names = list(groupes_valides.keys())
+    colors = plt.cm.tab10.colors
+
+    plt.figure(figsize=(12, 8))
+
+    # --- Tracé des individus globaux ---
+    plt.scatter(global_coords[0], global_coords[1],
+                c='black', s=100, zorder=5, label='Global (Moyenne)', marker='D')
+
+    # --- Tracé des individus partiels ---
+    # Dans prince, partial_coords est souvent un DataFrame où l'index 
+    # de colonne est un MultiIndex (Groupe, Composante)
+    for i, gname in enumerate(group_names):
+        # On extrait les coordonnées pour le groupe gname
+        # Note : on utilise .loc ou la sélection de niveau selon la version
+        try:
+            p_x = partial_coords[gname][0]
+            p_y = partial_coords[gname][1]
+        except KeyError:
+            # Sécurité pour certaines versions de prince
+            p_x = partial_coords.loc[:, (gname, 0)]
+            p_y = partial_coords.loc[:, (gname, 1)]
+
+        plt.scatter(p_x, p_y, color=colors[i % len(colors)], 
+                    s=60, alpha=0.7, label=f'Partiel – {gname}')
+
+        # Relier chaque point partiel au point global
+        for idx in X.index:
+            plt.plot([global_coords.loc[idx, 0], p_x.loc[idx]],
+                     [global_coords.loc[idx, 1], p_y.loc[idx]],
+                     color=colors[i % len(colors)], lw=1, alpha=0.3)
+
+    # Étiquettes des noms de communes
+    for idx in X.index:
+        plt.text(global_coords.loc[idx, 0], global_coords.loc[idx, 1], 
+                 str(idx), fontsize=9, fontweight='bold')
+
+    plt.axhline(0, color='black', ls='--', alpha=0.3)
+    plt.axvline(0, color='black', ls='--', alpha=0.3)
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.title(f"MFA – Zoom sur {n_sample} communes (Globaux vs Partiels)")
+    plt.xlabel(f"Dim 1 ({mfa.percentage_of_variance_[0]:.2f}%)")
+    plt.ylabel(f"Dim 2 ({mfa.percentage_of_variance_[1]:.2f}%)")
+    plt.grid(True, linestyle=':', alpha=0.5)
+    plt.tight_layout()
+    plt.show()
+
+def plot_mfa_variable_importance(mfa, data, groupes):
+    """
+    Carte de l'importance des groupes de variables sur chaque dimension.
+    Utilise mfa.group_contributions_ (compatible avec les versions récentes de prince).
+    """
+    # 1. Préparation et nettoyage
+    groupes_valides = {}
+    for nom, cols in groupes.items():
+        existantes = [c for c in cols if c in data.columns]
+        if existantes:
+            groupes_valides[nom] = existantes
+
+    # 2. Récupération des contributions des groupes
+    # Dans prince (v0.13+), c'est group_contributions_
+    try:
+        # On récupère les contributions (souvent normalisées ou brutes)
+        Lg = mfa.column_contributions_
+    except AttributeError:
+        # Si group_contributions_ n'existe pas, on tente de le calculer via la variance par groupe
+        # C'est une alternative robuste
+        print("Attribut group_contributions_ non trouvé, tentative de récupération via les composantes...")
+        return print("Erreur : Impossible de trouver les contributions des groupes dans cet objet MFA.")
+
+    colors = plt.cm.tab10.colors
+    fig, ax = plt.subplots(figsize=(10, 7))
+    texts = []
+
+    # 3. Tracé
+    # Lg est généralement un DataFrame où l'index est le nom du groupe
+    for i, gname in enumerate(Lg.index):
+        # On récupère les deux premières dimensions
+        # Note : Prince utilise parfois des colonnes nommées 0, 1 ou 'dim 0', 'dim 1'
+        x = Lg.iloc[i, 0] 
+        y = Lg.iloc[i, 1]
+        
+        ax.arrow(0, 0, x, y,
+                 head_width=x*0.05 if x > 0 else 0.01, 
+                 color=colors[i % len(colors)],
+                 alpha=0.8, length_includes_head=True, lw=2.5)
+        
+        texts.append(ax.text(x, y, gname, fontsize=12, fontweight='bold',
+                             color=colors[i % len(colors)]))
+
+    if texts:
+        adjust_text(texts, arrowprops=dict(arrowstyle='->', color='grey', lw=0.5))
+
+    # Ajustement des limites : les contributions sont positives
+    max_x = Lg.iloc[:, 0].max() * 1.2
+    max_y = Lg.iloc[:, 1].max() * 1.2
+    ax.set_xlim(-max_x*0.05, max_x)
+    ax.set_ylim(-max_y*0.05, max_y)
+    
+    ax.axhline(0, color='black', ls='--', alpha=0.3)
+    ax.axvline(0, color='black', ls='--', alpha=0.3)
+    
+    ax.set_xlabel(f"Contribution à l'Axe 1", fontsize=11)
+    ax.set_ylabel(f"Contribution à l'Axe 2", fontsize=11)
+    ax.set_title("MFA – Importance des groupes (Contributions)", fontsize=13, pad=20)
+    ax.grid(True, linestyle=':', alpha=0.4)
+    
+    plt.show()
+
+def plot_mfa_correlation_circle(mfa, data, groupes):
+    """
+    Cercle de corrélation des variables quantitatives.
+    Une couleur par groupe.
+    """
+    # 1. Récupération des coordonnées (on enlève les parenthèses)
+    col_coords = mfa.column_coordinates_
+
+    group_names = list(groupes.keys())
+    colors = plt.cm.tab10.colors
+
+    fig, ax = plt.subplots(figsize=(10, 10))
+    # Dessin du cercle unité
+    circle = plt.Circle((0, 0), 1, color='grey', fill=False, ls='--', lw=1)
+    ax.add_patch(circle)
+
+    texts = []
+    # On itère sur les groupes
+    for i, (gname, gcols) in enumerate(groupes.items()):
+        # On ne sélectionne que les variables du groupe présentes dans les résultats
+        existing_cols = [c for c in gcols if c in col_coords.index]
+        subset = col_coords.loc[existing_cols]
+        
+        for var in subset.index:
+            # On récupère les coordonnées sur les deux premiers axes (colonnes 0 et 1)
+            x, y = subset.iloc[subset.index.get_loc(var), 0], subset.iloc[subset.index.get_loc(var), 1]
+            
+            ax.arrow(0, 0, x, y, head_width=0.02,
+                     color=colors[i % len(colors)], alpha=0.7, length_includes_head=True)
+            
+            texts.append(ax.text(x, y, var, fontsize=10,
+                                 color=colors[i % len(colors)], fontweight='bold'))
+
+    # Légende pour les groupes
+    for i, gname in enumerate(group_names):
+        ax.plot([], [], color=colors[i % len(colors)], label=gname, lw=2)
+    ax.legend(loc='lower right', fontsize=10)
+
+    # Ajustement des textes
+    if texts:
+        adjust_text(texts, arrowprops=dict(arrowstyle='->', color='gray', lw=0.4, alpha=0.4))
+
+    # Cosmétique
+    ax.set_xlim(-1.1, 1.1)
+    ax.set_ylim(-1.1, 1.1)
+    ax.axhline(0, color='black', ls='--', alpha=0.3)
+    ax.axvline(0, color='black', ls='--', alpha=0.3)
+    
+    v1 = mfa.percentage_of_variance_[0]
+    v2 = mfa.percentage_of_variance_[1]
+    ax.set_xlabel(f"Dimension 1 ({v1:.2f}%)", fontsize=12)
+    ax.set_ylabel(f"Dimension 2 ({v2:.2f}%)", fontsize=12)
+    ax.set_title("MFA – Cercle de corrélation des variables", fontsize=14, pad=20)
+    ax.grid(True, linestyle=':', alpha=0.4)
     
     plt.show()
