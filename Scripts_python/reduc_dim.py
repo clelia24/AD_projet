@@ -378,64 +378,6 @@ def plot_mca_variable_importance(mca, data):
 MFA- les fonctions suivantes sont utilisées pour la MFA 
 """
 
-GROUPES_CANDIDATS = {
- 
-    'economie': [
-        'revratio2022',      
-        'capitalratio2022',  
-        'prixm2ratio2022',   
-        'perrsa2021',        
-        'pchom2022',         
-        'propf2022',         
-        'perpropri2022',    
-    ],
- 
-    'demographie': [
-        'age2022',                    
-        'densite_menages',            
-        'popagglo2022',               
-        'peretr2022',                 
-        'perimmigre2022',             
-        'part_etranger',              
-        'part_francais',              
-        'menage_moyen_3-4',
-        'menage_moyen_5 et plus',
-        'taille_agglo_moyenne_aglo',
-        'taille_agglo_grande_agglo',
-        'communeavececole_1.0',
-    ],
- 
-    'csp_diplomes': [
-        'pagri2022',         
-        'pindp2022',         
-        'pcadr2022',         
-        'ppint2022',        
-        'pempl2022',        
-        'pouvr2022',        
-        'paind2022',        
-        'paica2022',        
-        'pouem2022',        
-        'pcapi2022',        
-        'pbac2022',         
-        'psup2022',         
-        'perprive2021comm', 
-    ],
- 
-    'participation': [
-        'pparratio',           
-        'pinsratio',           
-        'pblancnulratio',      
-        'percrimesdelits2020', 
-    ],
- 
-    'vote': [
-        'pvoteG',    
-        'pvoteCG',   
-        'pvoteC',    
-        'pvoteCD',   
-        'pvoteD',    
-    ],
-}
  
 # Palette de couleurs pour les blocs politiques
 COULEURS_BLOCS = {
@@ -456,9 +398,8 @@ COULEURS_GROUPES = {
 }
 
 def transfo_mfa(data, n_components=5):
-    
-
-    
+# Effectue les transformations nécessaires pour la MFA : on nettoie et standardise les données
+#Mais du coup on fait sur tout ? pas juste les variables num ??
     data = data.replace([np.inf, -np.inf], np.nan)
 
     # Remplacement des valeurs manquantes par la moyenne
@@ -472,44 +413,25 @@ def transfo_mfa(data, n_components=5):
     return X_scaled
 
 
-def _groupes_to_prince(groupes):
-    """
-    Convertit un dict {nom_groupe: [col1, col2, ...]}
-    en dict {col: nom_groupe} attendu par prince >= 0.13
-    """
-    return {col: groupe for groupe, cols in groupes.items() for col in cols}
+
 
 def MFA(data, groupes, nb_compo=2):
-    """
-    Réalise une MFA sur un DataFrame avec des groupes de variables.
-    
-    Parameters
-    ----------
-    data : pd.DataFrame
-    groupes : dict  -> ex: {'Physique': ['taille', 'poids'], 'Social': ['age', 'revenu']}
-    nb_compo : int
-    """
 
-    groupes_valides = {}
-    for nom, cols in groupes.items():
-        existantes = [c for c in cols if c in data.columns]
-        if existantes:
-            groupes_valides[nom] = existantes
+#Réalise une MFA sur un DataFrame avec des groupes de variables.
+#groupes doit être du format : groupes : dict  -> ex: {'eco': ['col1', 'col2'], 'Social': ['colo1', 'colo2']} (sinon soucis avec prince)
 
-    # 2. Préparation et NETTOYAGE des données
-    all_cols = list(np.concatenate(list(groupes_valides.values())))
+    all_cols = list(np.concatenate(list(groupes.values())))
     X = data[all_cols].copy()
     
-    # Remplacement des infinis par NaN puis des NaN par la médiane
     X = X.replace([np.inf, -np.inf], np.nan)
-    X = X.fillna(X.median())
+    X = X.fillna(X.mean())
 
-    # 2. Calcul du nombre de composantes maximum possible
-    n_vars = sum(len(g) for g in groupes_valides.values())
+    #on a un nombre maximum de composantes (limité par le nombre de variables et d'individus)
+    n_vars = sum(len(g) for g in groupes.values())
     n_max = min(len(data) - 1, n_vars - 1)
 
     mfa = pr.MFA(n_components=nb_compo, random_state=42)
-    mfa = mfa.fit(X, groups=groupes_valides)
+    mfa = mfa.fit(X, groups=groupes)
 
     print("=" * 50)
     print("STATISTIQUES DE LA MFA")
@@ -521,24 +443,83 @@ def MFA(data, groupes, nb_compo=2):
     print(stats)
     print("=" * 50)
 
-    # --- Carte des individus ---
-    row_coords = mfa.row_coordinates(X)
-    plt.figure(figsize=(10, 7))
-    plt.scatter(row_coords[0], row_coords[1], c='steelblue', s=20, alpha=0.7, edgecolors='white')
+    return X, mfa
+
+def clean_label_mfa(data,mfa): 
+    #fonction récup du code MCA
+    #fonction qui permet de nettoyer les labels afin de faciliter la lecture des graphes 
+    #à garder pour quand j'afficherai les modalités 
+    col_coords = mfa.column_coordinates(data)
+    texts = []
+    binaires = ['0', '1', '0.0', '1.0', 'True', 'False', 'Oui', 'Non', 'O', 'N']
+    for index in col_coords.index:
+        label_original = str(index)
+        clean_label = label_original
+        
+        for col in data.columns:
+            if col in label_original:
+                valeur = label_original.replace(col, "").strip('_')
+                
+                if valeur in binaires or valeur == "":
+                    clean_label = f"{col}: {valeur}"
+                else:
+                    clean_label = valeur
+                break 
+
+        clean_label = clean_label.replace('_', ' ')
+        x = col_coords.loc[index, 0]
+        y = col_coords.loc[index, 1]
+        texts.append(plt.text(x, y, clean_label, fontsize=10, fontweight='bold'))
+
+    return texts
 
 
-    # On n'affiche que 50 noms au hasard pour éviter de saturer la mémoire
+
+def plot_mfa_colored(mfa, data, groupes, cols_vote, n_sample=2000):
+    """
+    Trace la carte des individus colorée selon le bloc de vote dominant.
+    """
+    # 1. Préparation des coordonnées (identique à ton code)
+    all_cols = list(np.concatenate(list(groupes.values())))
+    X_clean = data[all_cols].copy().replace([np.inf, -np.inf], np.nan).fillna(data[all_cols].mean())
+    row_coords = mfa.row_coordinates(X_clean)
     
+    # 2. Identification du bloc dominant pour la coloration
+    # On cherche le nom de la colonne qui a la valeur max pour chaque ligne
+    data_coords = row_coords.copy()
+    data_coords['bloc_dominant'] = data.loc[row_coords.index, cols_vote].idxmax(axis=1)
+
+    if n_sample < len(data_coords):
+        data_plot = data_coords.sample(n=n_sample, random_state=42)
+        print(f"Affichage de {n_sample} communes sur {len(data_coords)}")
+    else:
+        data_plot = data_coords
+    plt.figure(figsize=(12, 8))
+    
+    # 3. Tracé avec Seaborn (gère automatiquement les couleurs et la légende)
+    # On réduit s (taille) et alpha (transparence) car tu as beaucoup de points
+    sns.scatterplot(
+        data=data_coords, 
+        x=0, y=1, 
+        hue='bloc_dominant', 
+        palette='Set1', # Palette de couleurs distinctes
+        s=15, 
+        alpha=0.6, 
+        edgecolor=None
+    )
+
+    # 4. Affichage d'un échantillon de noms (ton code adjust_text)
     n_labels = min(50, len(row_coords))
     sample_indices = random.sample(list(row_coords.index), n_labels)
-
     texts = []
     for idx in sample_indices:
         x, y = row_coords.loc[idx, 0], row_coords.loc[idx, 1]
-        texts.append(plt.text(x, y, str(idx), fontsize=8))
+        texts.append(plt.text(x, y, str(idx), fontsize=8, fontweight='bold'))
 
     if texts:
-        adjust_text(texts, arrowprops=dict(arrowstyle='->', color='gray', lw=0.5))
+        adjust_text(texts, arrowprops=dict(arrowstyle='->', color='black', lw=0.5, alpha=0.5))
+
+    # 5. Cosmétique
     plt.axhline(0, color='black', linestyle='--', linewidth=1, alpha=0.3)
     plt.axvline(0, color='black', linestyle='--', linewidth=1, alpha=0.3)
 
@@ -546,11 +527,11 @@ def MFA(data, groupes, nb_compo=2):
     v2 = mfa.percentage_of_variance_[1]
     plt.xlabel(f"Dimension 1 ({v1:.2f}%)")
     plt.ylabel(f"Dimension 2 ({v2:.2f}%)")
-    plt.title("MFA : Carte des individus")
+    plt.title("MFA : Carte des communes par Bloc Dominant", fontsize=14)
+    plt.legend(title="Vote Majoritaire", bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.grid(True, linestyle=':', alpha=0.5)
+    plt.tight_layout()
     plt.show()
-
-    return mfa
 
 
 def analyse_dimensionnelle_mfa(data, groupes, seuils=[50, 80]):
