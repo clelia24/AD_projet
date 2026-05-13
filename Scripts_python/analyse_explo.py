@@ -13,13 +13,9 @@ Ce fichier contient les fonctions utiles à l'analyse exploratoire des données.
 """
 
 def mat_corre(data):
-    # Sélection des variables numériques
+    # affichage de la matrice de correlation 
     data_pd = data.select_dtypes(include='number')
-
-    # Calcul de la corrélation (Pandas gère les NA par paire automatiquement)
     corr_pd = data_pd.corr()
-
-    #Sécurité : on remplace par 0 les NaN qui apparaîtraient si une variable a une variance nulle
     corr_pd = corr_pd.fillna(0)
 
     #Génération du graphique
@@ -37,16 +33,14 @@ def mat_corre(data):
 
 
 def France_Bloc (data):
-    # Chargement et Nettoyage des géométries
+    #affichage de la france en fonction des blocs politiques 
     url_geojson = "https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/communes.geojson"
     france_communes = gpd.read_file(url_geojson)
 
-    # Préparation rigoureuse des données (nettoyage des codes et des noms)
     data['codecommune'] = data['codecommune'].astype(str).str.strip().str.zfill(5)
     data['Bloc_Dominant'] = data['Bloc_Dominant'].astype(str).str.strip() # Enlève les espaces invisibles
     france_communes['code'] = france_communes['code'].astype(str).str.strip().str.zfill(5)
 
-    # Fusion (Merge)    
     carte_data = france_communes.merge(data, left_on='code', right_on='codecommune', how='inner')
 
     # Configuration du dictionnaire de couleurs
@@ -58,10 +52,8 @@ def France_Bloc (data):
         'pvoteD': '#0000FF',   # Bleu
     }
 
-    # Création  de la palette (Colormap)
-    categories_reelles = sorted(list(carte_data['Bloc_Dominant'].unique()))
 
-    # On crée la liste des couleurs : si une catégorie est inconnue, elle sera VERT FLUO
+    categories_reelles = sorted(list(carte_data['Bloc_Dominant'].unique()))
     couleurs_liste = [couleurs_dict.get(cat, '#00FF00') for cat in categories_reelles]
     cmap_custom = mcolors.ListedColormap(couleurs_liste)
 
@@ -86,7 +78,7 @@ def France_Bloc (data):
         }
     )
 
-    # Finalisation
+
     ax.set_axis_off()
     plt.title("Carte de France par Bloc Dominant (2022)", fontsize=18, fontweight='bold', pad=20)
 
@@ -99,13 +91,12 @@ def France_Bloc (data):
     plt.show()
 
 def France_Parti(data): 
-    # Chargement & Préparation 
+    # affichage de la carte de France en fonction des partis politiques
     url_geojson = "https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/communes.geojson"
     france_communes = gpd.read_file(url_geojson)
     data['codecommune'] = data['codecommune'].astype(str).str.zfill(5)
     carte_data = france_communes.merge(data, left_on='code', right_on='codecommune')
 
-    # Configuration des couleurs (Vérifie bien que ces noms sont dans 'Parti_Dominant')
     couleurs = {
         'pvoixAUG': '#8B0000',    # Rouge sombre / Bordeaux (Extrême Gauche)
         'pvoixNUP': '#FF3333',    # Rouge vif (NUPES)
@@ -119,10 +110,8 @@ def France_Parti(data):
         'pvoixREC': '#000033',    # Bleu nuit / Noir (Reconquête)
     }
 
-    # Gestion des catégories
     valeurs_reelles = carte_data['Parti_Dominant'].unique().tolist()
 
-    # Correction : Ajout de la virgule entre 'pvoixENS' et 'pvoixLR'
     ordre_logique = ['pvoixAUG','pvoixNUP','pvoixDVG','pvoixENS', 'pvoixLR','pvoixDVD','pvoixRN','pvoixREC','pvoixUDI','pvoixREG']
 
     categories_finales = [b for b in ordre_logique if b in valeurs_reelles]
@@ -133,7 +122,6 @@ def France_Parti(data):
     couleurs_liste = [couleurs.get(cat, '#CCCCCC') for cat in categories_finales]
     cmap_custom = mcolors.ListedColormap(couleurs_liste)
 
-    #  Affichage
     fig, ax = plt.subplots(1, 1, figsize=(15, 15), dpi=150)
 
     carte_data.plot(
@@ -158,6 +146,10 @@ def France_Parti(data):
     plt.show()
 
 def tracer_scatter (data, col_x, col_y, log_scale, moyenne, lim): 
+    #fonction permettant d'afficher des scatterplots
+    #col_x et col_y sont les données à comparer 
+    # log_scale et moyenne sont des boolean 
+    #lim prend une limite sur l'axe x pour limiter l'affichage
     plt.figure(figsize=(10, 6))
     sns.scatterplot(
         data=data, 
@@ -188,6 +180,10 @@ def tracer_scatter (data, col_x, col_y, log_scale, moyenne, lim):
 
 
 def tracer_scatter_bloc(data, bloc, couleurs, col_x, col_y, titre):
+    #fonction permettant d'afficher des scatterplots en fonction d'une variable qualitative
+    # bloc prend la variable qualitative
+    #col_x et col_y sont les colonnes à comparer
+
     plt.figure(figsize=(13, 8))
 
     # On crée le graphique
@@ -218,27 +214,31 @@ def tracer_scatter_bloc(data, bloc, couleurs, col_x, col_y, titre):
 
     plt.show()
 
-import pandas as pd
-import matplotlib.pyplot as plt
 
 def top_communes_barres(data, col_top, col_blocs, n, minimum):
+    #permet de comparer les communes avec des valeurs extrêmes à la moyenne nationale 
+    # col_top = colonne dont on veut voir les valeurs extremes 
+    # col_blocs= colonne de chaque bloc qu'on veut comparer
+    # n = nombre de communes qu'on prend 
+    #minimum, boolean, est ce qu'on prend les scores les plus bas ou les plus hauts 
+
+    prefix = "Pire" if minimum else "Top"
+    label_zone = f"{prefix} {n} {col_top}"
+
     if minimum: 
         top_comm = data.sort_values(by=col_top, ascending=True).head(n)
     else : 
         top_comm = data.sort_values(by=col_top, ascending=False).head(n)
 
-    # Calcul des moyennes pour la liste des colonnes (col_blocs doit être une liste)
     moyenne_absten = top_comm[col_blocs].mean()
     moyenne_totale = data[col_blocs].mean()
 
     df_plot = pd.DataFrame({
-        f'Top {n} {col_top}': moyenne_absten,
+        label_zone: moyenne_absten,
         'Moyenne France': moyenne_totale
     })
 
-    # Génération du graphique
     ax = df_plot.plot(kind='bar', figsize=(14, 7), color=['#006633', '#8B0000'], width=0.8)
-
 
     plt.title(f"Comparaison du vote par bloc : {col_top} vs France Entière", fontsize=15, pad=20)
     plt.ylabel("Score moyen (%)", fontsize=12)
@@ -263,27 +263,25 @@ def top_communes_barres(data, col_top, col_blocs, n, minimum):
 
 
 def comparer_structure_vote(data, col_critere, blocs_vote, dict_couleurs, n=10, ascending=False, titre=""):
-    # 1. Sélection des données
+    #permet de comparer les votes de communes "extremes" à la moyenne nationale 
+    # col_critere = quelles communes sont considérées comme extremes 
+    # blocs_votes = liste des colonnes de vote 
+    #Ascending = est ce qu'on prend les communes les plus basses ou les plus hautes 
     selection = data.sort_values(by=col_critere, ascending=ascending).head(n)
     
-    # 2. Calcul de la moyenne nationale
     moyenne_nationale = data[blocs_vote].mean().to_frame().T
     moyenne_nationale.index = ['MOYENNE FRANCE']
     
-    # 3. Préparation du DataFrame
+
     df_communes = selection.set_index('codecommune')[blocs_vote]
     df_plot = pd.concat([moyenne_nationale, df_communes])
     
-    # --- LA LIGNE MAGIQUE POUR RÉGLER LA TAILLE DES BARRES ---
-    # Cette ligne transforme tes données en parts relatives (0 à 100%)
-    # Même si tes données sont des ratios (0.2) ou des % (20), elles rempliront la barre
+
     df_plot_norm = df_plot.div(df_plot.sum(axis=1), axis=0) * 100
 
-    # 4. Attribution des couleurs
-    # On s'assure que l'ordre des couleurs suit l'ordre des colonnes du DataFrame
+
     liste_couleurs = [dict_couleurs.get(col, '#808080') for col in df_plot_norm.columns]
 
-    # 5. Création du graphique
     ax = df_plot_norm.plot(
         kind='barh', 
         stacked=True, 
@@ -294,11 +292,9 @@ def comparer_structure_vote(data, col_critere, blocs_vote, dict_couleurs, n=10, 
         linewidth=0.5
     )
 
-    # Réglages des axes
     plt.gca().invert_yaxis()
-    plt.xlim(0, 100) # L'axe X va maintenant de 0 à 100% proprement
-    
-    # Légende
+    plt.xlim(0, 100) #
+
     handles, labels = ax.get_legend_handles_labels()
     clean_labels = [l.replace('pvote', '') for l in labels]
     plt.legend(handles, clean_labels, title='Blocs', bbox_to_anchor=(1.05, 1), loc='upper left')
@@ -309,6 +305,7 @@ def comparer_structure_vote(data, col_critere, blocs_vote, dict_couleurs, n=10, 
     plt.show()
 
 def boxplot(data, blocs):
+    # permet de tracer les boxplots
     plt.figure(figsize=(12, 6))
     sns.boxplot(data=data[blocs], palette="Set3")
 
@@ -319,6 +316,7 @@ def boxplot(data, blocs):
     plt.show()
 
 def histo_CG_D(data):
+    #permet de tracer les histogrammes de la repartition des votes 
     plt.figure(figsize=(10, 6))
     sns.histplot(data['pvoteCGratio'], kde=True, color='pink', label='Centre-Gauche')
     sns.histplot(data['pvoteDratio'], kde=True, color='blue', label='Droite', alpha=0.3)
