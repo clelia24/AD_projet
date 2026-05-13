@@ -1,4 +1,3 @@
-#from great_tables import data
 import pandas as pd
 from pandas import col
 import polars as pl
@@ -83,9 +82,7 @@ def cols_drop (data):
     #pour enlever toutes les colonnes qui commencent par voix ou par vote -> ce sont des données brutes de votes, on préfère les pourcentages de votes qui sont plus parlants et comparables entre les communes
     raw_votes_cols = [col for col in data.columns if col.startswith('voix') or col.startswith('vote')]
 
-
     total_drop = cols_to_drop + raw_votes_cols
-
 
     data = data.drop(total_drop, axis=1, errors='ignore')
     return data
@@ -99,15 +96,15 @@ def modif_quali (data, col, bins, labels,nom, right):
 
 def crea_variable_gagnants (data):
     # on crée les deux variables dont on a besoin pour l'analyse
-    # Définition des blocs à comparer
+    # par blocs
     blocs = [
         'pvoteG', 'pvoteCG', 'pvoteC', 
         'pvoteCD', 'pvoteD',
     ]
-    #par commune : le bloc "vainqueur" et son score
     data['Bloc_Dominant'] = data[blocs].idxmax(axis=1)
     data['Bloc_Score'] = data[blocs].max(axis=1)
 
+    #par partis
     partis =['pvoixAUG', 'pvoixNUP', 'pvoixDVG', 'pvoixECO', 'pvoixREG', 'pvoixENS', 'pvoixUDI', 'pvoixDVD', 'pvoixREC', 'pvoixRN', 'pvoixLR' ]
     data['Parti_Dominant']= data[partis].idxmax(axis=1)
     data['Parti_score']=data[partis].max(axis=1)
@@ -117,10 +114,9 @@ def crea_variable_gagnants (data):
     return data
 
 def ajouter_variable_division(data, colonnes_partis, seuil=0.25):
-    # On cherche le score maximum pour chaque commune parmi les colonnes de partis
+    # ajoute une variable indiquant si la  commune est considérée comme divisée 
     score_max = data[colonnes_partis].max(axis=1)
     
-    # Si le score max est inférieur au seuil, la commune est considérée comme "divisée"
     data['Est_Divise'] = (score_max < seuil).astype(int)
  
     nb_divises = data['Est_Divise'].sum()
@@ -150,8 +146,7 @@ def affichage_qualite(data):
         "missing_ratio": (data.isna().sum() / len(data)).values,
         "dtype": data.dtypes.astype(str).values
     })
-    # création visuel coloré
-    # data_quality est DÉJÀ un DataFrame Pandas, on applique le style directement.
+
     affichage_colore = (
         data_quality.style
         .background_gradient(subset=['n_missing', 'missing_ratio'], cmap='Reds')
@@ -162,7 +157,7 @@ def affichage_qualite(data):
     return affichage_colore
 
 def affichage_hist(data, col,log_scale): 
-    # Configuration du style visuel
+    # création des histogrammes des variables qualitatives 
     sns.set_theme(style="whitegrid")
     if log_scale==True:
         # On utilise log_scale=True

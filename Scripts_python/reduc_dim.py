@@ -195,6 +195,8 @@ MCA- les fonctions suivantes sont utilisées pour la MCA
 
 def enlever_dummies(data, debut, nom_col, nom_manquant):
     #permet de regrouper les variables sous forme de dummies en une seule variable
+    # debut prend le string de l'indicateur des differentes variables 
+    # nom manquant = prend le nom qui sera donné aux variables qui ont été supprimées 
     col_a_nett= [c for c in data.columns if c.startswith(debut)] 
     data[nom_col]=data[col_a_nett].idxmax(axis=1) # les autres sont en 0, donc ça prend la seule qui est en 1
     data.loc[data[col_a_nett].sum(axis=1) == 0, nom_col] = nom_manquant # si il y en a 0 ça veut dire que c'est celle qui a été enlevé qu'il met 
@@ -203,7 +205,8 @@ def enlever_dummies(data, debut, nom_col, nom_manquant):
     return data 
 
 
-def MCA(data, nb_compo=2):
+
+def MCA(data, nb_compo):
     #code pour faire la MCA de nos données 
     mca = pr.MCA(n_components=nb_compo, random_state=42)
     mca = mca.fit(data)
@@ -218,14 +221,13 @@ def MCA(data, nb_compo=2):
     })
     print(stats)
     print("="*50)
+    return mca 
 
+def clean_label(data,mca): 
+    #fonction qui permet de nettoyer les labels afin de faciliter la lecture des graphes 
     col_coords = mca.column_coordinates(data)
-    plt.figure(figsize=(10, 7))
-    plt.scatter(col_coords[0], col_coords[1], c='red', s=50, alpha=0.7, edgecolors='white')
-
     texts = []
     binaires = ['0', '1', '0.0', '1.0', 'True', 'False', 'Oui', 'Non', 'O', 'N']
-
     for index in col_coords.index:
         label_original = str(index)
         clean_label = label_original
@@ -241,26 +243,32 @@ def MCA(data, nb_compo=2):
                 break 
 
         clean_label = clean_label.replace('_', ' ')
-        
         x = col_coords.loc[index, 0]
         y = col_coords.loc[index, 1]
         texts.append(plt.text(x, y, clean_label, fontsize=10, fontweight='bold'))
 
+    return texts
 
+def plot_MCA(data, mca):
+    #permet de plot les modalités selon les deux premiers axes 
+    col_coords = mca.column_coordinates(data)
+    plt.figure(figsize=(10, 7))
+    plt.scatter(col_coords[0], col_coords[1], c='red', s=50, alpha=0.7, edgecolors='white')
+    
+    texts=clean_label(data,mca)
     adjust_text(texts, arrowprops=dict(arrowstyle='->', color='gray', lw=0.5, alpha=0.5))
 
     plt.axhline(0, color='black', linestyle='--', linewidth=1, alpha=0.3)
     plt.axvline(0, color='black', linestyle='--', linewidth=1, alpha=0.3)
     
-    v1 = mca.percentage_of_variance_[0] * 100
-    v2 = mca.percentage_of_variance_[1] * 100
+    v1 = mca.percentage_of_variance_[0] 
+    v2 = mca.percentage_of_variance_[1] 
     plt.xlabel(f"Dimension 1 ({v1:.2f}%)")
     plt.ylabel(f"Dimension 2 ({v2:.2f}%)")
     plt.title("ACM : Carte des modalités ")
     plt.grid(True, linestyle=':', alpha=0.5)
     
     plt.show()
-    return mca
 
 def analyse_dimensionnelle_mca(data, seuils=[50, 80]): 
    #code pour analyser les variables à ajouter pour expliquer la variance 
@@ -295,33 +303,38 @@ def analyse_dimensionnelle_mca(data, seuils=[50, 80]):
 
 
 def plot_mca_modalities_fortes(mca, data, use_contribution=True):
-    #plot les contributions/ le cos2 de chaque modfalité
+    # plot le cos2 ou la contribution de la MCA 
+    # on affiche la somme des contributions/cos sur les deux axes en même temps 
     coords = mca.column_coordinates(data)
     if use_contribution:
-        stat = mca.column_contributions_.sum(axis=1) 
-        title = "Contribution des Modalités (Poids sur les axes)"
+        stat = mca.column_contributions_.sum(axis=1)
+        title = "Contribution des Modalités (Axe 1 + Axe 2)"
         cmap = 'YlOrRd'
     else:
         cos2_df = mca.column_cosine_similarities(data)
         stat = cos2_df.sum(axis=1)
-        title = "Qualité de représentation (cos²)"
+        title = "Qualité de représentation (cos² cumulé)"
         cmap = 'YlOrRd'
-
-    plt.figure(figsize=(10, 7))
+    plt.figure(figsize=(12, 8))
     sc = plt.scatter(coords[0], coords[1], c=stat, cmap=cmap, s=100, edgecolors='k', alpha=0.8)
-    plt.colorbar(sc, label='Intensité')
-
-    for i, txt in enumerate(coords.index):
-        plt.annotate(txt.split('_')[-1], (coords.iloc[i, 0], coords.iloc[i, 1]), fontsize=9)
-
-    plt.axhline(0, color='grey', ls='--'), plt.axvline(0, color='grey', ls='--')
+    plt.colorbar(sc, label='Intensité (Somme des deux axes)')
+    texts = clean_label(data, mca)
+    adjust_text(texts, arrowprops=dict(arrowstyle='->', color='gray', lw=0.5, alpha=0.5))
+    plt.axhline(0, color='grey', ls='--')
+    plt.axvline(0, color='grey', ls='--')
+    v1 = mca.percentage_of_variance_[0] 
+    v2 = mca.percentage_of_variance_[1] 
+    plt.xlabel(f"Dimension 1 ({v1:.2f}%)")
+    plt.ylabel(f"Dimension 2 ({v2:.2f}%)")
+    
     plt.title(title)
+    plt.grid(True, linestyle=':', alpha=0.3)
     plt.show()
 
 
 
 def plot_mca_variable_importance(mca, data):
-    # contribution des variables au deux premiers axes 
+    # contribution des variables aux deux premiers axes 
     contributions = mca.column_contributions_
     var_data = []
     
@@ -334,7 +347,7 @@ def plot_mca_variable_importance(mca, data):
     df_var = pd.DataFrame(var_data)
     fig, ax = plt.subplots(figsize=(10, 7))
     
-    texts = []
+    texts =[]
     for i, row in df_var.iterrows():
         ax.arrow(0, 0, row['Dim1'], row['Dim2'], 
                  head_width=max(df_var['Dim1'])*0.02, 
