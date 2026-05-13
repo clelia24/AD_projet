@@ -661,32 +661,14 @@ def plot_mfa_partial_individuals(mfa, data, groupes, n_sample=20):
 def plot_mfa_variable_importance(mfa, data, groupes):
     """
     Carte de l'importance des groupes de variables sur chaque dimension.
-    Utilise mfa.group_contributions_ (compatible avec les versions récentes de prince).
     """
-    # 1. Préparation et nettoyage
-    groupes_valides = {}
-    for nom, cols in groupes.items():
-        existantes = [c for c in cols if c in data.columns]
-        if existantes:
-            groupes_valides[nom] = existantes
+    Lg = mfa.column_contributions_
 
-    # 2. Récupération des contributions des groupes
-    # Dans prince (v0.13+), c'est group_contributions_
-    try:
-        # On récupère les contributions (souvent normalisées ou brutes)
-        Lg = mfa.column_contributions_
-    except AttributeError:
-        # Si group_contributions_ n'existe pas, on tente de le calculer via la variance par groupe
-        # C'est une alternative robuste
-        print("Attribut group_contributions_ non trouvé, tentative de récupération via les composantes...")
-        return print("Erreur : Impossible de trouver les contributions des groupes dans cet objet MFA.")
 
     colors = plt.cm.tab10.colors
     fig, ax = plt.subplots(figsize=(10, 7))
     texts = []
 
-    # 3. Tracé
-    # Lg est généralement un DataFrame où l'index est le nom du groupe
     for i, gname in enumerate(Lg.index):
         # On récupère les deux premières dimensions
         # Note : Prince utilise parfois des colonnes nommées 0, 1 ou 'dim 0', 'dim 1'
@@ -705,10 +687,10 @@ def plot_mfa_variable_importance(mfa, data, groupes):
         adjust_text(texts, arrowprops=dict(arrowstyle='->', color='grey', lw=0.5))
 
     # Ajustement des limites : les contributions sont positives
-    max_x = Lg.iloc[:, 0].max() * 1.2
-    max_y = Lg.iloc[:, 1].max() * 1.2
-    ax.set_xlim(-max_x*0.05, max_x)
-    ax.set_ylim(-max_y*0.05, max_y)
+    #max_x = Lg.iloc[:, 0].max() * 1.2
+    #max_y = Lg.iloc[:, 1].max() * 1.2
+    #ax.set_xlim(-max_x*0.05, max_x)
+    #ax.set_ylim(-max_y*0.05, max_y)
     
     ax.axhline(0, color='black', ls='--', alpha=0.3)
     ax.axvline(0, color='black', ls='--', alpha=0.3)
