@@ -4,6 +4,10 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 import seaborn as sns
+import prince 
+import matplotlib.patches as mpatches
+import matplotlib.patheffects as pe
+
  
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import silhouette_score, silhouette_samples, calinski_harabasz_score
@@ -12,6 +16,7 @@ from sklearn.mixture import GaussianMixture
 from sklearn.neighbors import kneighbors_graph
 from joblib import Parallel, delayed
 from scipy import sparse
+
 
 
 """ 
@@ -577,3 +582,156 @@ def evaluer_sbm(A, X, k_range, max_iter=20, random_state=42,sample_size=2000, ra
         scores["CH"].append(ch)
  
     return scores, labels_par_k
+
+"""
+code pour la MCA sur le GMM
+"""
+def discretiser_means(means_df, bin_edges_dict, df_mca_columns):
+    #discretisation
+    result = pd.DataFrame(index=means_df.index)
+    for col in means_df.columns:
+        if col in bin_edges_dict:
+            result[col] = pd.cut(
+                means_df[col],
+                bins=bin_edges_dict[col],
+                labels=False,
+                include_lowest=True,
+            ).astype("Int64").astype(str).fillna("NA")
+    # Alignement sur toutes les colonnes MCA
+    for col in df_mca_columns:
+        if col not in result.columns:
+            result[col] = "NA"
+    return result[df_mca_columns]
+
+def MCA_gmm (df_travail):
+    #fonction permettant de faire la MCA avec nos données de Cluster Gmm
+    # Préparation
+    donnees_scaled, _, _ = preparer_donnees_clustering(df_travail, colonnes_id=[], fillna_method="median")
+
+    df_numerique = ( df_travail.select_dtypes(include=[np.number]).replace([np.inf, -np.inf], np.nan).fillna( df_travail.select_dtypes(include=[np.number]).median()))
+    scaler = StandardScaler()
+    scaler.fit(df_numerique)
+
+    # Fit GMM
+    labels_gmm, probas_gmm, gmm = fit_gmm(donnees_scaled, n_components=4)
+
+    # Means dans l'espace original via inverse_transform
+    means_gmm = pd.DataFrame(
+        scaler.inverse_transform(gmm.means_),
+        columns=df_numerique.columns,
+        index=[f"GMM_Cluster_{i+1}" for i in range(gmm.n_components)],
+    )
+
+    # Discrétisation de df_travail (sauvegarde des bins pour projeter les means)
+    n_bins = 4
+    df_num = df_travail.select_dtypes(include=[np.number])
+    df_cat = df_travail.select_dtypes(include=["object", "category"])
+
+    df_num_disc = pd.DataFrame(index=df_travail.index)
+    bin_edges = {}
+
+    for col in df_num.columns:
+        series = df_num[col].replace([np.inf, -np.inf], np.nan).dropna()
+        try:
+            _, edges = pd.qcut(series, q=n_bins, retbins=True, duplicates="drop")
+            df_num_disc[col] = pd.cut(
+                df_num[col], bins=edges, labels=False, include_lowest=True
+            ).astype("Int64").astype(str)
+            bin_edges[col] = edges
+        except Exception:
+            pass
+    df_cat = df_travail.select_dtypes(include=["object", "category"])
+    
+    cat_utiles = [col for col in df_cat.columns if df_cat[col].nunique() < 50]
+
+    cols_ignorees = set(df_cat.columns) - set(cat_utiles)
+    if cols_ignorees:
+        print(f"Colonnes exclues de l'ACM car trop précises : {cols_ignorees}")
+
+    df_mca_input = df_num_disc.copy()
+    if cat_utiles:
+        df_mca_input = pd.concat([df_mca_input, df_cat[cat_utiles].astype(str)], axis=1)
+    
+    df_mca_input = df_mca_input.fillna("NA")
+
+    #fit MCA 
+    mca = prince.MCA(n_components=2, random_state=42)
+    mca.fit(df_mca_input)
+
+    # Coordonnées des individus et des modalités
+    coords_individus  = mca.row_coordinates(df_mca_input)
+    coords_modalites  = mca.column_coordinates(df_mca_input)
+    means_gmm_disc = discretiser_means(means_gmm, bin_edges, df_mca_input.columns)
+
+    # Projection comme individus supplémentaires (ON NE FIT PAS DESSUS)
+    coords_gmm_proj = mca.row_coordinates(means_gmm_disc)
+
+    print("=== Coordonnées MCA — Centres GMM ===")
+    print(coords_gmm_proj.round(4))
+
+    try:
+        ev = mca.percentage_of_variance_
+        xlabel = f"Dimension 1 ({ev[0]:.1f}% d'inertie)"
+        ylabel = f"Dimension 2 ({ev[1]:.1f}% d'inertie)"
+    except AttributeError:
+        ev = mca.eigenvalues_summary["% of variance"]
+        xlabel = f"Dimension 1 ({ev.iloc[0]})"
+        ylabel = f"Dimension 2 ({ev.iloc[1]})"
+
+    fig, ax = plt.subplots(figsize=(12, 8), dpi=150)
+
+    ax.set_facecolor('#F8FAFC')
+    fig.patch.set_facecolor('white')
+    ax.grid(color='#E2E8F0', linestyle='--', linewidth=1, zorder=0)
+
+    ax.axhline(0, color="#94A3B8", linewidth=1.5, linestyle="-", zorder=1)
+    ax.axvline(0, color="#94A3B8", linewidth=1.5, linestyle="-", zorder=1)
+
+    idx_sample = np.random.choice(len(coords_individus), size=min(3000, len(coords_individus)), replace=False)
+    ax.scatter(
+        coords_individus.iloc[idx_sample, 0],
+        coords_individus.iloc[idx_sample, 1],
+        alpha=0.3, s=20, color="#64748B", edgecolors="none", zorder=2, label="_nolegend_"
+    )
+
+    colors_gmm = plt.cm.Set1(np.linspace(0, 1, len(coords_gmm_proj)))
+
+    for i, (idx, row) in enumerate(coords_gmm_proj.iterrows()):
+        x, y = row.iloc[0], row.iloc[1]
+        
+        # Losanges GMM
+        ax.scatter(
+            x, y,
+            s=400, color=colors_gmm[i], marker="D",
+            zorder=5, edgecolors="white", linewidths=2.5
+        )
+
+        ax.annotate(
+            idx, (x, y),
+            fontsize=12, fontweight="bold", color="#1E293B",
+            xytext=(14, 10), textcoords="offset points", zorder=6,
+            path_effects=[pe.withStroke(linewidth=4, foreground="white")]
+        )
+
+    for spine in ['top', 'right']:
+        ax.spines[spine].set_visible(False)
+    for spine in ['left', 'bottom']:
+        ax.spines[spine].set_color('#CBD5E1')
+        ax.spines[spine].set_linewidth(1.5)
+
+
+    ax.set_xlabel(xlabel, fontsize=13, fontweight='medium', color='#334155', labelpad=10)
+    ax.set_ylabel(ylabel, fontsize=13, fontweight='medium', color='#334155', labelpad=10)
+    ax.set_title("Projection des centres GMM dans l'espace MCA", 
+                 fontsize=16, fontweight="bold", color="#0F172A", pad=20)
+
+ 
+    legend_elements = [
+        plt.Line2D([0], [0], marker="D", color="w", markerfacecolor="#EF4444",
+                   markersize=13, markeredgecolor="white", markeredgewidth=2, label="Centres GMM")
+    ]
+    ax.legend(handles=legend_elements, fontsize=12, frameon=True, 
+              facecolor='white', edgecolor='#E2E8F0', loc='best', borderpad=1)
+
+    plt.tight_layout()
+    plt.show()
