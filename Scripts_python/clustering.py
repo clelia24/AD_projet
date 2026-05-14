@@ -268,6 +268,64 @@ def tracer_cartes_avec_sans_vote(df_avec, df_sans, colonne_cluster, methode="",u
     plt.tight_layout()
     plt.show()
 
+def tracer_cartes_multiples(cartes_config, url_geojson=None, cmap_name="tab10",figsize=None, dpi=150):
+
+    # Affiche plusieurs cartes côte à côte.
+    #cartes_config prends une liste de tuple (df_data, colonne_cluster,titre)
+    try:
+        import geopandas as gpd
+    except ImportError:
+        raise ImportError("geopandas est requis pour tracer les cartes.")
+ 
+    if url_geojson is None:
+        url_geojson = _GEOJSON_URL
+ 
+    france = gpd.read_file(url_geojson)
+    n = len(cartes_config)
+    if figsize is None:
+        figsize = (14 * n, 14)
+ 
+    # On détermine toutes les catégories pour une colormap cohérente entre cartes
+    all_categories = set()
+    merged_list = []
+    for df_data, colonne_cluster, _ in cartes_config:
+        df = df_data.copy()
+        df["codecommune"] = df["codecommune"].astype(str).str.zfill(5)
+        merged = france.merge(df, left_on="code", right_on="codecommune", how="inner")
+        merged_list.append((merged, colonne_cluster))
+        all_categories |= set(merged[colonne_cluster].unique())
+ 
+    categories = sorted(all_categories)
+    cmap = cm.get_cmap(cmap_name, len(categories))
+ 
+    fig, axes = plt.subplots(1, n, figsize=figsize, dpi=dpi)
+    if n == 1:
+        axes = [axes]
+ 
+    for ax, (merged, colonne_cluster), (_, _, titre) in zip(axes, merged_list, cartes_config):
+        merged.plot(
+            column=colonne_cluster,
+            ax=ax,
+            categorical=True,
+            categories=categories,
+            cmap=cmap,
+            legend=True,
+            linewidth=0,
+            edgecolor="none",
+            legend_kwds={
+                "title": colonne_cluster,
+                "loc": "upper left",
+                "bbox_to_anchor": (1, 1),
+                "frameon": False,
+            },
+        )
+        ax.set_axis_off()
+        ax.set_title(titre, fontsize=18, fontweight="bold")
+ 
+    plt.tight_layout()
+    plt.show()
+
+
 def comparer_clusters_variables(df_travail, colonne_cluster, n_top=15, colonnes_a_exclure=None):
     #affiche les variables les plus discriminantes 
     #df_travail doit contenir colonne_cluster 
@@ -381,7 +439,7 @@ def fit_gmm(donnees_scaled, n_components, covariance_type="full", random_state=4
     gmm = GaussianMixture(n_components=n_components, covariance_type=covariance_type,
                           random_state=random_state)
     gmm.fit(X)
-    labels = gmm.predict(X) + 1
+    labels = gmm.predict(X) 
     probas = gmm.predict_proba(X)
     return labels, probas, gmm
 
