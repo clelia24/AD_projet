@@ -23,12 +23,12 @@ warnings.filterwarnings('ignore')
 Ce fichier contient les fonctions utiles au clustering Spectral.
 """
 
-def compute_laplacian_sym_eigenvalues(X, n_neighbors=7, n_eigvals=15):
+def compute_laplacian_sym_eigenvalues(data, n_neighbors=7, n_eigvals=15):
     """
     Construit le graphe k-NN symétrique, calcule le Laplacien normalisé
     et retourne ses premières valeurs propres triées.
     """
-    A = kneighbors_graph(X, n_neighbors=n_neighbors,
+    A = kneighbors_graph(data, n_neighbors=n_neighbors,
                          mode='connectivity', include_self=False)
     A = A + A.T
     A.data = np.ones_like(A.data)  # poids binaires
@@ -44,12 +44,12 @@ def compute_laplacian_sym_eigenvalues(X, n_neighbors=7, n_eigvals=15):
     return np.sort(np.real(eigenvalues)), n_neighbors, n_eigvals
 
 
-def compute_laplacian_rw_eigenvalues(X, n_neighbors=7, n_eigvals=15):
+def compute_laplacian_rw_eigenvalues(data, n_neighbors=7, n_eigvals=15):
     """
     Construit le graphe k-NN symétrique, calcule le Laplacien random walk
     et retourne ses premières valeurs propres triées.
     """
-    A = kneighbors_graph(X, n_neighbors=n_neighbors,
+    A = kneighbors_graph(data, n_neighbors=n_neighbors,
                          mode='connectivity', include_self=False)
     A = A + A.T
     A.data = np.ones_like(A.data)  # poids binaires
@@ -61,7 +61,7 @@ def compute_laplacian_rw_eigenvalues(X, n_neighbors=7, n_eigvals=15):
     L_rw = sp.eye(A.shape[0]) - D_inv @ A
 
     eigenvalues, _ = spla.eigsh(L_rw, k=n_eigvals, which='SM')
-    return np.sort(np.real(eigenvalues)), n_neighbors, n_eigvals
+    return np.sort(np.real(eigenvalues))
 
 def print_eigenvalues(eigenvalues, n_neighbors, n_eigvals):
     print(f'Calcul des valeurs propres (n_neighbors={n_neighbors} | n_eigvals={n_eigvals})...')
@@ -101,147 +101,207 @@ def plot_eigengap(eigenvalues):
     print(f'\n→ K suggéré par l\'eigengap : {K_eigengap}')
 
 
-def choix_n_neighbors(X, n_neighbors_list=[5, 7, 10], n_eigvals=15):
+def test_sensitivity_neighbors(data, K, n_neighbors_list=[5, 7, 9, 10, 15, 20]):
+    neighbors_range  = n_neighbors_list
 
+    resultats_neighbors = []
 
-def plot_elbow_method_graph(data, nb_clusters_max):
-    """
-    Affiche le graphique de la méthode du coude pour déterminer le nombre optimal de clusters.
-    """
-    ac = AgglomerativeClustering(linkage="ward", compute_distances=True)
-    ac.fit(data)
+    for nn in neighbors_range:
+        model = SpectralClustering(
+            n_clusters=K,
+            affinity='nearest_neighbors',
+            n_neighbors=nn,
+            assign_labels='kmeans',
+            random_state=42,
+            n_jobs=-1
+        )
+        labels = model.fit_predict(data.values)
 
-    n_sizes = nb_clusters_max
-    x = np.arange(n_sizes, 0, -1)
-    y = ac.distances_[-n_sizes:]
+        sil = silhouette_score(data.values, labels, sample_size=2000, random_state=42)
+        db  = davies_bouldin_score(data.values, labels)
+        ch  = calinski_harabasz_score(data.values, labels)
 
-    fig, ax = plt.subplots(figsize=(8, 4))
+        resultats_neighbors.append({
+            'n_neighbors': nn,
+            'silhouette': round(sil, 4),
+            'davies_bouldin': round(db, 4),
+            'calinski_harabasz': round(ch, 1)
+        })
+        # print(f'n_neighbors={nn:2d} | Silhouette={sil:.4f} | DB={db:.4f} | CH={ch:.1f}')
 
-    ax.plot(x, y, marker="o", color="steelblue", linewidth=2, markersize=6)
+    df_neighbors = pd.DataFrame(resultats_neighbors).set_index('n_neighbors')
+    df_neighbors
 
-    ax.set_xlabel("Number of clusters")
-    ax.set_ylabel("Merge distance")
-    ax.set_title("Elbow method - Agglomerative Clustering")
-    ax.set_xticks(x)
-    ax.spines[["top", "right"]].set_visible(False)
-    ax.grid(True, linestyle="--", alpha=0.3)
+def plot_sensitivity_neighbors(df_neighbors, K):
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
 
+    metrics = [
+        ('silhouette',        'Silhouette (↑)',        'green'),
+        ('davies_bouldin',    'Davies-Bouldin (↓)',     'red'),
+        ('calinski_harabasz', 'Calinski-Harabasz (↑)',  'steelblue'),
+    ]
+
+    for ax, (col, title, color) in zip(axes, metrics):
+        ax.plot(df_neighbors.index, df_neighbors[col], 'o-', color=color, linewidth=2)
+        ax.set_xlabel('n_neighbors')
+        ax.set_title(title)
+        ax.grid(alpha=0.3)
+
+    plt.suptitle(f'Sensibilite à n_neighbors (K={K})', fontsize=12, fontweight='bold')
     plt.tight_layout()
     plt.show()
 
-def plot_elbow_method_yellowbrick(data, metric):
-    """
-    Affiche le graphique de la méthode du coude avec le package yellowbrick pour déterminer le nombre optimal de clusters.
-    Parameters:
-    data (pd.DataFrame): Le dataset à analyser.
-    metric (str): La métrique à utiliser pour évaluer les clusters (ex: 'silhouette', 'calinski_harabasz', 'davies_bouldin').
-    """
-    ac = AgglomerativeClustering(linkage='ward', compute_distances=True)
-    visualizer = KElbowVisualizer(ac, k=(2,12), metric=metric, force_model=True)
+def test_sensitivity_clusters(data, n_neighbors, K_range=range(2, 9)):
+    K_RANGE           = K_range
 
-    visualizer.fit(data) 
-    visualizer.show()   
+    resultats_k = []
+
+    for k in K_RANGE:
+        model = SpectralClustering(
+            n_clusters=k,
+            affinity='nearest_neighbors',
+            n_neighbors=n_neighbors,
+            assign_labels='kmeans',
+            random_state=42,
+            n_jobs=-1
+        )
+        labels = model.fit_predict(data.values)
+
+        sil = silhouette_score(data.values, labels, sample_size=2000, random_state=42)
+        db  = davies_bouldin_score(data.values, labels)
+        ch  = calinski_harabasz_score(data.values, labels)
+
+        resultats_k.append({'K': k, 'silhouette': sil, 'davies_bouldin': db,
+                            'calinski_harabasz': ch})
+        # print(f'K={k} | Silhouette={sil:.4f} | DB={db:.4f} | CH={ch:.1f}')
+
+    df_k = pd.DataFrame(resultats_k).set_index('K')
+    df_k.round(4)
+
+def plot_sensitivity_clusters(df_k, K_eigengap):
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+
+    metrics = [
+        ('silhouette',        'Silhouette (↑)',        'green'),
+        ('davies_bouldin',    'Davies-Bouldin (↓)',     'red'),
+        ('calinski_harabasz', 'Calinski-Harabasz (↑)',  'steelblue'),
+    ]
+
+    for ax, (col, title, color) in zip(axes, metrics):
+        ax.plot(df_k.index, df_k[col], 'o-', color=color, linewidth=2)
+        ax.axvline(x=K_eigengap, color='orange', linestyle='--', linewidth=1.5,
+                label=f'Eigengap → K={K_eigengap}')
+        ax.set_xlabel('K')
+        ax.set_title(title)
+        ax.legend(fontsize=8)
+        ax.grid(alpha=0.3)
+
+    plt.suptitle('Métriques de clustering selon K', fontsize=12, fontweight='bold')
+    plt.tight_layout()
     plt.show()
 
+def spectral_clustering(data, K, n_neighbors):
+    N = data.shape[0]
+    print(f'Nombre total de communes : {N:,}')
 
-def plot_dendrogram(data, nb_clusters, method='ward', ax=None):
-    """
-    Affiche le dendrogramme de la classification hiérarchique.
-    """
-    K = nb_clusters
-    Z = sch.linkage(data, method=method)
-    seuil_coupure = Z[-(K-1), 2]
+    cols_a_exclure = ['label_spectral']
+    data = data.drop(columns=cols_a_exclure, errors='ignore')
 
-    # Si un axe est fourni (subplot), on travaille dessus. Sinon, on prend l'axe courant.
-    if ax is None:
-        ax = plt.gca()
+    feature_cols = data.columns.tolist()
+    print(f'Features utilisées : {len(feature_cols)} colonnes')
 
-    ax.set_title(f"Dendrogramme CAH - {method} - K={K}")
-    ax.set_xlabel("Index des communes")
-    ax.set_ylabel(f"Distance de {method}")
-
-    sch.dendrogram(
-        Z,
-        labels=data.index.get_level_values('codecommune').values,
-        leaf_rotation=90.,
-        leaf_font_size=8.,
-        color_threshold=seuil_coupure,
-        ax=ax # On force le dendrogramme à se dessiner sur le bon subplot
+    model_final = SpectralClustering(
+        n_clusters=K,
+        affinity='nearest_neighbors',
+        n_neighbors=n_neighbors,
+        assign_labels='cluster_qr',
+        random_state=42,
+        n_jobs=-1
     )
+    labels_spectral = model_final.fit_predict(data[feature_cols].values)
 
-    # Ligne de coupure des K clusters
-    ax.axhline(y=seuil_coupure, color='r', linestyle='--', linewidth=1.5,
-               label=f'Coupure à {K} clusters (seuil : {seuil_coupure:.1f})')
-    ax.legend(fontsize=8)
+    data['label_spectral'] = labels_spectral
 
-def plot_carte_cah(
-    data: pd.DataFrame,      # données normalisées complètes (34 870 × 72)
-    nb_clusters: int,
-    method: str = 'ward'
-) -> tuple[plt.Figure, pd.DataFrame, np.ndarray]:
+    print('\nDistribution des clusters :')
+    dist = pd.Series(labels_spectral).value_counts().sort_index()
+    for k, n in dist.items():
+        print(f'  Cluster {k} : {n:,} communes ({n/N*100:.1f}%)')
 
-    K = nb_clusters
+    # évaluation des performances du clustering spectral
+    idx_eval = np.random.choice(N, size=min(5000, N), replace=False)
+    X_eval   = data.drop(columns='label_spectral').values[idx_eval]
+    y_eval   = labels_spectral[idx_eval]
 
-    # 1. CAH sur les données COMPLÈTES (comme donnees_clustering dans le notebook)
-    Z = sch.linkage(data, method=method)
-    labels_cah = sch.fcluster(Z, K, criterion='maxclust') - 1  # [0..K-1]
-    n_total = len(data)
+    sil_final = silhouette_score(X_eval, y_eval)
+    db_final  = davies_bouldin_score(X_eval, y_eval)
+    ch_final  = calinski_harabasz_score(X_eval, y_eval)
 
-    # 2. DataFrame carte - aligné sur data (même index que raw_data)
-    df_carte_cluster = data.reset_index().copy()
-    df_carte_cluster['codecommune'] = (
-        df_carte_cluster['codecommune'].astype(str).str.zfill(5)
-    )
-    df_carte_cluster['label_cah'] = labels_cah   # même longueur : OK
-    df_carte_cluster['Nom_Cluster'] = df_carte_cluster['label_cah'].apply(
-        lambda l: f'Cluster {l}'
-    )
+    print(f'Métriques finales  (K={K}, n_neighbors={n_neighbors})')
+    print(f'  Silhouette        : {sil_final:.4f}  (↑ mieux, max=1)')
+    print(f'  Davies-Bouldin    : {db_final:.4f}  (↓ mieux, min=0)')
+    print(f'  Calinski-Harabasz : {ch_final:.1f} (↑ mieux)')
 
-    # ... reste inchangé
+    return labels_spectral
 
-    # 3. GeoData
-    url_geojson = (
-        "https://raw.githubusercontent.com/gregoiredavid/"
-        "france-geojson/master/communes.geojson"
-    )
+
+def profils_par_cluster(df_numerique, labels_spectral):
+    # ── Profils moyens par cluster (variables originales) ─────────────
+    df_profil = df_numerique.copy()
+    df_profil['label_spectral'] = labels_spectral
+
+    profils = df_profil.groupby('label_spectral').mean()
+    profils.round(3)
+    
+
+def plot_carte_spectral(data, labels_spectral, K, n_neighbors):
+    # ── Préparation ───────────────────────────────────────────────────
+    df_carte = data.reset_index().copy()
+    df_carte['codecommune'] = df_carte['codecommune'].astype(str).str.zfill(5)
+    df_carte['label_spectral'] = labels_spectral
+    df_carte['Nom_Cluster'] = df_carte['label_spectral'].apply(lambda l: f'Cluster {l}')
+    n_total = len(df_carte)
+
+    # ── GeoJSON ────────────────────────────────────────────────────────
+    url_geojson = 'https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/communes.geojson'
     france_communes = gpd.read_file(url_geojson)
-    carte_data = france_communes.merge(
-        df_carte_cluster, left_on='code', right_on='codecommune'
-    )
+    carte_data = france_communes.merge(df_carte, left_on='code', right_on='codecommune')
 
-    # 4. Couleurs dynamiques
-    cmap_clusters = plt.get_cmap('Set1', K)
-    categories    = [f'Cluster {i}' for i in range(K)]
-    couleurs_dict = {cat: mcolors.to_hex(cmap_clusters(i))
-                     for i, cat in enumerate(categories)}
-    cmap_custom   = mcolors.ListedColormap([couleurs_dict[c] for c in categories])
+    # ── Couleurs ────────────────────────────────────────────────────────
+    cmap_clusters    = plt.get_cmap('Set1', K)
+    couleurs_dict    = {f'Cluster {i}': mcolors.to_hex(cmap_clusters(i)) for i in range(K_FINAL)}
+    categories_finales = [f'Cluster {i}' for i in range(K)]
+    cmap_custom      = mcolors.ListedColormap([couleurs_dict[c] for c in categories_finales])
 
-    # 5. Carte
+    # ── Carte ───────────────────────────────────────────────────────────
     fig, ax = plt.subplots(1, 1, figsize=(15, 15), dpi=150)
+
     carte_data.plot(
         column='Nom_Cluster', ax=ax,
-        categorical=True, categories=categories,
+        categorical=True, categories=categories_finales,
         cmap=cmap_custom, legend=False,
         linewidth=0, edgecolor='none',
         missing_kwds={'color': '#eeeeee', 'label': 'Données manquantes'}
     )
 
-    # 6. Légende avec effectifs
-    handles = [
-        mpatches.Patch(
-            color=couleurs_dict[cat],
-            label=f'{cat}  ({(df_carte_cluster["Nom_Cluster"]==cat).sum():,}'
-                  f' communes, '
-                  f'{(df_carte_cluster["Nom_Cluster"]==cat).sum()/n_total*100:.1f}%)'
-        )
-        for cat in categories
-    ]
-    ax.legend(handles=handles, title=f"CAH {method.capitalize()}- K={K}",
-              loc='upper left', bbox_to_anchor=(1, 1),
-              frameon=False, fontsize=11, title_fontsize=12)
-    ax.set_axis_off()
-    plt.title(f"Carte de France - CAH (K={K}, méthode={method})",
-              fontsize=16, fontweight='bold', pad=20)
-    plt.tight_layout()
+    # Légende manuelle avec effectifs
+    handles = []
+    for cat in categories_finales:
+        n = (df_carte['Nom_Cluster'] == cat).sum()
+        pct = n / n_total * 100
+        patch = mpatches.Patch(color=couleurs_dict[cat],
+                            label=f'{cat}  ({n:,} communes, {pct:.1f}%)')
+        handles.append(patch)
 
-    return fig, df_carte_cluster, labels_cah
+    ax.legend(
+        handles=handles,
+        title=f'Clustering Spectral — K={K}, n_neighbors={n_neighbors}',
+        loc='upper left', bbox_to_anchor=(1, 1),
+        frameon=False, fontsize=11, title_fontsize=12
+    )
+
+    ax.set_axis_off()
+    plt.title(f'Carte de France — Clustering Spectral (K={K} clusters)',
+            fontsize=16, fontweight='bold', pad=20)
+    plt.tight_layout()
+    plt.show()
+
