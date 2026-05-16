@@ -43,11 +43,65 @@ def compute_laplacian_sym_eigenvalues(X, n_neighbors=7, n_eigvals=15):
 
     return np.sort(np.real(eigenvalues)), n_neighbors, n_eigvals
 
+
+def compute_laplacian_rw_eigenvalues(X, n_neighbors=7, n_eigvals=15):
+    """
+    Construit le graphe k-NN symétrique, calcule le Laplacien random walk
+    et retourne ses premières valeurs propres triées.
+    """
+    A = kneighbors_graph(X, n_neighbors=n_neighbors,
+                         mode='connectivity', include_self=False)
+    A = A + A.T
+    A.data = np.ones_like(A.data)  # poids binaires
+
+    degrees = np.array(A.sum(axis=1)).flatten()
+    D_inv = sp.diags(1.0 / np.maximum(degrees, 1e-10))
+
+    # Laplacien random walk : L_rw = I - D^{-1} A
+    L_rw = sp.eye(A.shape[0]) - D_inv @ A
+
+    eigenvalues, _ = spla.eigsh(L_rw, k=n_eigvals, which='SM')
+    return np.sort(np.real(eigenvalues)), n_neighbors, n_eigvals
+
 def print_eigenvalues(eigenvalues, n_neighbors, n_eigvals):
     print(f'Calcul des valeurs propres (n_neighbors={n_neighbors} | n_eigvals={n_eigvals})...')
     print(np.round(eigenvalues, 4))
 
+def plot_spectrum(eigenvalues,):
+    gaps = np.diff(eigenvalues[:])
+    K_eigengap = int(np.argmax(gaps)) + 1  # indice avant le plus grand saut → K suggéré
 
+    plt.plot(range(1, len(eigenvalues)+1), eigenvalues, 'o-',
+            color='steelblue', linewidth=2, markersize=6)
+    plt.axvline(x=K_eigengap, color='red', linestyle='--', linewidth=1.5,
+            label=f'K suggéré = {K_eigengap}')
+    plt.set_xlabel('Indice de la valeur propre')
+    plt.set_ylabel('Valeur propre λ')
+    plt.set_title('Spectre du Laplacien normalisé')
+    plt.legend(); plt.grid(alpha=0.3)
+
+
+def plot_eigengap(eigenvalues):
+    gaps = np.diff(eigenvalues[:])
+    K_eigengap = int(np.argmax(gaps)) + 1  # indice avant le plus grand saut → K suggéré
+
+    
+    colors_bar = ['red' if i == K_eigengap - 1 else 'steelblue' for i in range(len(gaps))]
+    plt.bar(range(1, len(gaps)+1), gaps, color=colors_bar, alpha=0.8)
+    plt.set_xlabel('k')
+    plt.set_ylabel('λ(k+1) − λ(k)')
+    plt.set_title('Eigengap — saut entre valeurs propres consécutives')
+    plt.legend(handles=[mpatches.Patch(color='red', label=f'Plus grand saut → K={K_eigengap}')])
+    plt.grid(alpha=0.3)
+
+    plt.suptitle('Choix de K par la méthode eigengap', fontsize=13, fontweight='bold')
+    plt.tight_layout()
+    plt.show()
+
+    print(f'\n→ K suggéré par l\'eigengap : {K_eigengap}')
+
+
+def choix_n_neighbors(X, n_neighbors_list=[5, 7, 10], n_eigvals=15):
 
 
 def plot_elbow_method_graph(data, nb_clusters_max):
@@ -67,7 +121,7 @@ def plot_elbow_method_graph(data, nb_clusters_max):
 
     ax.set_xlabel("Number of clusters")
     ax.set_ylabel("Merge distance")
-    ax.set_title("Elbow method — Agglomerative Clustering")
+    ax.set_title("Elbow method - Agglomerative Clustering")
     ax.set_xticks(x)
     ax.spines[["top", "right"]].set_visible(False)
     ax.grid(True, linestyle="--", alpha=0.3)
@@ -133,7 +187,7 @@ def plot_carte_cah(
     labels_cah = sch.fcluster(Z, K, criterion='maxclust') - 1  # [0..K-1]
     n_total = len(data)
 
-    # 2. DataFrame carte — aligné sur data (même index que raw_data)
+    # 2. DataFrame carte - aligné sur data (même index que raw_data)
     df_carte_cluster = data.reset_index().copy()
     df_carte_cluster['codecommune'] = (
         df_carte_cluster['codecommune'].astype(str).str.zfill(5)
@@ -182,11 +236,11 @@ def plot_carte_cah(
         )
         for cat in categories
     ]
-    ax.legend(handles=handles, title=f"CAH {method.capitalize()} — K={K}",
+    ax.legend(handles=handles, title=f"CAH {method.capitalize()}- K={K}",
               loc='upper left', bbox_to_anchor=(1, 1),
               frameon=False, fontsize=11, title_fontsize=12)
     ax.set_axis_off()
-    plt.title(f"Carte de France — CAH (K={K}, méthode={method})",
+    plt.title(f"Carte de France - CAH (K={K}, méthode={method})",
               fontsize=16, fontweight='bold', pad=20)
     plt.tight_layout()
 

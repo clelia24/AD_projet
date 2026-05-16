@@ -31,7 +31,7 @@ def plot_elbow_method_graph(data, nb_clusters_max):
 
     ax.set_xlabel("Number of clusters")
     ax.set_ylabel("Merge distance")
-    ax.set_title("Elbow method — Agglomerative Clustering")
+    ax.set_title("Elbow method - Agglomerative Clustering")
     ax.set_xticks(x)
     ax.spines[["top", "right"]].set_visible(False)
     ax.grid(True, linestyle="--", alpha=0.3)
@@ -97,7 +97,7 @@ def plot_carte_cah(
     labels_cah = sch.fcluster(Z, K, criterion='maxclust') - 1  # [0..K-1]
     n_total = len(data)
 
-    # 2. DataFrame carte — aligné sur data (même index que raw_data)
+    # 2. DataFrame carte - aligné sur data (même index que raw_data)
     df_carte_cluster = data.reset_index().copy()
     df_carte_cluster['codecommune'] = (
         df_carte_cluster['codecommune'].astype(str).str.zfill(5)
@@ -146,11 +146,11 @@ def plot_carte_cah(
         )
         for cat in categories
     ]
-    ax.legend(handles=handles, title=f"CAH {method.capitalize()} — K={K}",
+    ax.legend(handles=handles, title=f"CAH {method.capitalize()} - K={K}",
               loc='upper left', bbox_to_anchor=(1, 1),
               frameon=False, fontsize=11, title_fontsize=12)
     ax.set_axis_off()
-    plt.title(f"Carte de France — CAH (K={K}, méthode={method})",
+    plt.title(f"Carte de France - CAH (K={K}, methode={method})",
               fontsize=16, fontweight='bold', pad=20)
     plt.tight_layout()
 
