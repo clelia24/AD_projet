@@ -42,10 +42,7 @@ def plot_elbow_method_graph(data, nb_clusters_max):
 def plot_elbow_method_yellowbrick(data, metric):
     """
     Affiche le graphique de la méthode du coude avec le package yellowbrick pour déterminer le nombre optimal de clusters.
-    Parameters:
-    data (pd.DataFrame): Le dataset à analyser.
-    metric (str): La métrique à utiliser pour évaluer les clusters (ex: 'silhouette', 'calinski_harabasz', 'davies_bouldin').
-    """
+   """
     ac = AgglomerativeClustering(linkage='ward', compute_distances=True)
     visualizer = KElbowVisualizer(ac, k=(2,12), metric=metric, force_model=True)
 
@@ -84,20 +81,18 @@ def plot_dendrogram(data, nb_clusters, method='ward', ax=None):
                label=f'Coupure à {K} clusters (seuil : {seuil_coupure:.1f})')
     ax.legend(fontsize=8)
 
-def plot_carte_cah(
-    data: pd.DataFrame,      # données normalisées complètes (34 870 × 72)
-    nb_clusters: int,
-    method: str = 'ward'
-) -> tuple[plt.Figure, pd.DataFrame, np.ndarray]:
+def plot_carte_cah(data, nb_clusters, method='ward'):
+    """
+    Affiche une carte de France colorée selon les clusters obtenus par la classification hiérarchique (CAH).
+    """
 
     K = nb_clusters
 
-    # 1. CAH sur les données COMPLÈTES (comme donnees_clustering dans le notebook)
+    # CAH sur les données COMPLÈTES 
     Z = sch.linkage(data, method=method)
     labels_cah = sch.fcluster(Z, K, criterion='maxclust') - 1  # [0..K-1]
     n_total = len(data)
 
-    # 2. DataFrame carte - aligné sur data (même index que raw_data)
     df_carte_cluster = data.reset_index().copy()
     df_carte_cluster['codecommune'] = (
         df_carte_cluster['codecommune'].astype(str).str.zfill(5)
@@ -107,9 +102,6 @@ def plot_carte_cah(
         lambda l: f'Cluster {l}'
     )
 
-    # ... reste inchangé
-
-    # 3. GeoData
     url_geojson = (
         "https://raw.githubusercontent.com/gregoiredavid/"
         "france-geojson/master/communes.geojson"
@@ -119,14 +111,13 @@ def plot_carte_cah(
         df_carte_cluster, left_on='code', right_on='codecommune'
     )
 
-    # 4. Couleurs dynamiques
     cmap_clusters = plt.get_cmap('Set1', K)
     categories    = [f'Cluster {i}' for i in range(K)]
     couleurs_dict = {cat: mcolors.to_hex(cmap_clusters(i))
                      for i, cat in enumerate(categories)}
     cmap_custom   = mcolors.ListedColormap([couleurs_dict[c] for c in categories])
 
-    # 5. Carte
+    # Carte
     fig, ax = plt.subplots(1, 1, figsize=(15, 15), dpi=150)
     carte_data.plot(
         column='Nom_Cluster', ax=ax,
@@ -136,7 +127,6 @@ def plot_carte_cah(
         missing_kwds={'color': '#eeeeee', 'label': 'Données manquantes'}
     )
 
-    # 6. Légende avec effectifs
     handles = [
         mpatches.Patch(
             color=couleurs_dict[cat],
