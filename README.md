@@ -14,5 +14,6 @@ Les fonctions sont classées en fonction de leur apparition dans le Notebook, et
 * `transfo_data.py` qui regroupe les fonctions utilisées dans la premiere partie du notebook **"2-Traitement des données"**
 * `analyse_explo` qui comprend les fonctions de la partie **"3-Analyse exploratoire"**
 * `reduc_dim` qui comprend les fonctions de la partie **"4-Réduction de dimension linéaire"**
+* `clustering.py` qui coomprend les fonctions de la partie **5-Clustering**
 
 Ces indications peuvent être retrouvées directement dans le notebook. 
